@@ -1,6 +1,6 @@
 import { pgTable, uuid, text, timestamp, boolean, index, uniqueIndex, pgEnum } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { account } from './account.js';
+import { account } from './account';
 
 export const personaModerationState = pgEnum('persona_moderation_state', [
   'ok',

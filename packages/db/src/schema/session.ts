@@ -1,6 +1,6 @@
 import { pgTable, uuid, text, timestamp, index } from 'drizzle-orm/pg-core';
-import { account } from './account.js';
-import { persona } from './persona.js';
+import { account } from './account';
+import { persona } from './persona';
 
 export const session = pgTable(
   'session',

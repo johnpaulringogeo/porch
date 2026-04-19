@@ -1,6 +1,7 @@
 /**
- * v0 placeholder landing page. The full marketing/landing experience and
- * authenticated dashboards land in later milestones.
+ * v0 landing page. Intro copy on the platform, links into auth, and the
+ * five-mode preview. The marketing/landing experience will be replaced in
+ * a later milestone — for now it doubles as the "hello stranger" page.
  */
 export default function Page() {
   return (
@@ -20,7 +21,23 @@ export default function Page() {
         </code>
         .
       </p>
-      <div className="flex flex-wrap gap-3 pt-4 text-sm">
+
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <a
+          href="/signup"
+          className="rounded-md bg-mode-home px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+        >
+          Create an account
+        </a>
+        <a
+          href="/login"
+          className="rounded-md border border-[hsl(var(--border-default))] px-4 py-2 text-sm font-medium hover:bg-[hsl(var(--surface-muted))]"
+        >
+          Log in
+        </a>
+      </div>
+
+      <div className="flex flex-wrap gap-3 pt-6 text-sm">
         <span className="rounded-full bg-mode-home px-3 py-1 text-white">
           Home
         </span>

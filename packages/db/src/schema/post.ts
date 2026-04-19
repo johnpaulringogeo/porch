@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, timestamp, pgEnum, index, primaryKey } from 'drizzle-orm/pg-core';
-import { persona } from './persona.js';
+import { persona } from './persona';
 
 export const postMode = pgEnum('post_mode', [
   'home',

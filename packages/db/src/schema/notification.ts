@@ -1,5 +1,5 @@
 import { pgTable, uuid, timestamp, jsonb, pgEnum, index } from 'drizzle-orm/pg-core';
-import { persona } from './persona.js';
+import { persona } from './persona';
 
 export const notificationType = pgEnum('notification_type', [
   'contact_request_received',

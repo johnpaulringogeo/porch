@@ -39,3 +39,8 @@ drizzle/
 # Temp
 tmp/
 .tmp/
+
+# Local API test scratch files (cookies jar + JSON payloads for curl smoke tests)
+cookies.txt
+signup.json
+login.json

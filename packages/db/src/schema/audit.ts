@@ -1,6 +1,6 @@
 import { pgTable, uuid, text, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
-import { account } from './account.js';
-import { persona } from './persona.js';
+import { account } from './account';
+import { persona } from './persona';
 
 /**
  * Append-only audit log of every state-changing action.

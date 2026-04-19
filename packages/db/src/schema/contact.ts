@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, timestamp, primaryKey, index, pgEnum } from 'drizzle-orm/pg-core';
-import { persona } from './persona.js';
+import { persona } from './persona';
 
 export const contactRequestStatus = pgEnum('contact_request_status', [
   'pending',

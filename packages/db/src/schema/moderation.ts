@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, timestamp, pgEnum, index } from 'drizzle-orm/pg-core';
-import { persona } from './persona.js';
+import { persona } from './persona';
 
 export const moderationReportStatus = pgEnum('moderation_report_status', [
   'open',
