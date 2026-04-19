@@ -8,6 +8,12 @@ export interface Env {
   JWT_SIGNING_KEY: string;
   PORCH_HOST: string;
   WEB_ORIGIN: string;
+  /**
+   * Which runtime is hosting this request. Defaults to 'edge' (Cloudflare
+   * Workers). Node's server.node.ts overrides to 'node' so we can pick a
+   * Postgres driver that supports transactions.
+   */
+  PORCH_RUNTIME?: 'node' | 'edge';
 }
 
 export function readEnv(env: Partial<Env>): Env {
