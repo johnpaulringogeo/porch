@@ -1,0 +1,32 @@
+{
+  "name": "@porch/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx watch ./src/server.node.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node ./dist/server.node.js",
+    "deploy": "wrangler deploy",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.11.0",
+    "@porch/core": "workspace:*",
+    "@porch/db": "workspace:*",
+    "@porch/types": "workspace:*",
+    "hono": "^4.3.11",
+    "zod": "^3.23.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240502.0",
+    "@types/node": "^20.12.7",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0",
+    "wrangler": "^3.57.0"
+  }
+}

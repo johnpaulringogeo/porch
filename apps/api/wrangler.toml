@@ -1,0 +1,16 @@
+name = "porch-api"
+main = "src/index.ts"
+compatibility_date = "2024-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Production
+[env.production]
+vars = { PORCH_HOST = "porch.example", WEB_ORIGIN = "https://porch.example" }
+
+# Staging
+[env.staging]
+vars = { PORCH_HOST = "staging.porch.example", WEB_ORIGIN = "https://staging.porch.example" }
+
+# Local-style preview (use `wrangler dev` for local hot reload).
+# Secrets (DATABASE_URL, PERSONA_KEY_ENCRYPTION_KEY, JWT_SIGNING_KEY) are
+# stored via `wrangler secret put` per environment.

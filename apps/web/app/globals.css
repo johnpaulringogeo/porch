@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Mode-aware CSS variables. The actual palette lives in @porch/ui tokens;
+ * these vars are what the Tailwind preset's `bg-mode-*` utilities read.
+ * The body's `data-mode` attribute (set in layout.tsx or per-route) flips
+ * the active surface so every mode gets its own look.
+ */
+@layer base {
+  :root {
+    --mode-home-accent: 144 34% 28%;
+    --mode-home-surface: 144 20% 97%;
+
+    --mode-public-accent: 32 90% 46%;
+    --mode-public-surface: 40 44% 97%;
+
+    --mode-community-accent: 211 72% 46%;
+    --mode-community-surface: 211 40% 97%;
+
+    --mode-professional-accent: 214 18% 34%;
+    --mode-professional-surface: 214 14% 97%;
+
+    --mode-creators-accent: 0 72% 48%;
+    --mode-creators-surface: 0 28% 97%;
+
+    --surface-default: 0 0% 100%;
+    --surface-muted: 220 14% 96%;
+    --text-default: 220 9% 12%;
+    --text-muted: 220 5% 40%;
+    --border-default: 220 13% 88%;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-[hsl(var(--surface-default))] text-[hsl(var(--text-default))] antialiased;
+    font-family: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* Serif swap for Public mode (essayish reading experience). */
+  body[data-mode='public'] {
+    font-family: 'Source Serif 4 Variable', ui-serif, Georgia, serif;
+  }
+}
