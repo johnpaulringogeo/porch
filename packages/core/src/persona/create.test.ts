@@ -53,8 +53,10 @@ function makeFakeDb(personaIdOverride = 'persona_test_01') {
     },
   };
 
+  type Tx = typeof tx;
+
   const db = {
-    async transaction<T>(fn: (tx: typeof tx) => Promise<T>): Promise<T> {
+    async transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
       return fn(tx);
     },
   };

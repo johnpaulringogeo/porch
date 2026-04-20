@@ -14,7 +14,7 @@ export const porchPreset: Partial<Config> = {
         mono: fontFamily.mono.split(/,\s*/),
       },
       fontSize,
-      fontWeight: fontWeight as unknown as Config['theme']['fontWeight'],
+      fontWeight: fontWeight as unknown as NonNullable<Config['theme']>['fontWeight'],
       spacing,
       borderRadius: radius,
       colors: {

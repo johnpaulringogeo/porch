@@ -31,7 +31,7 @@ export async function createSession(
     ipAddress: input.ipAddress ?? null,
   };
 
-  const [created] = await db.insert(session).values(row).returning({ id: session.id });
+  const [created] = await db.insert(session).values(row).returning();
   if (!created) throw new Error('Failed to create session');
 
   return { sessionId: created.id, refreshToken: token, expiresAt };

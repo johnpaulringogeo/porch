@@ -54,6 +54,7 @@ describe('signAccessToken / verifyAccessToken', () => {
     const { token } = await signAccessToken(KEY_A, PAYLOAD);
     // Flip one character in the payload segment.
     const [header, payload, sig] = token.split('.');
+    if (!payload) throw new Error('Expected JWT payload segment');
     const tampered = [header, payload.slice(0, -1) + (payload.slice(-1) === 'A' ? 'B' : 'A'), sig].join('.');
     await expect(verifyAccessToken(KEY_A, tampered)).rejects.toThrow();
   });

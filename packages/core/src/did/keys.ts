@@ -81,7 +81,7 @@ export async function decryptPrivateKey(
   return new Uint8Array(plaintext);
 }
 
-async function importAesKey(base64Key: string): Promise<CryptoKey> {
+async function importAesKey(base64Key: string) {
   const raw = base64ToUint8(base64Key);
   if (raw.length !== 32) {
     throw new Error(`PERSONA_KEY_ENCRYPTION_KEY must decode to 32 bytes, got ${raw.length}`);
