@@ -41,9 +41,18 @@ export default function AppLayout({
     <div className="min-h-screen bg-[hsl(var(--surface-default))]">
       <header className="border-b border-[hsl(var(--border-default))]">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <a href="/dashboard" className="text-sm font-semibold tracking-tight">
-            Porch
-          </a>
+          <div className="flex items-center gap-3">
+            <a href="/dashboard" className="text-sm font-semibold tracking-tight">
+              Porch
+            </a>
+            <span
+              aria-label="Active mode: Home"
+              className="inline-flex items-center gap-1.5 rounded-full bg-mode-home-surface px-2 py-0.5 text-[11px] font-medium text-mode-home ring-1 ring-mode-home/25"
+            >
+              <span className="h-1 w-1 rounded-full bg-mode-home" />
+              Home
+            </span>
+          </div>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-[hsl(var(--text-muted))]">
               @{session.persona.username}
