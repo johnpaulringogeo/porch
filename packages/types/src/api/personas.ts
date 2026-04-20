@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Persona } from '../domain/index.js';
 import { usernameRegex } from './auth.js';
 
 export const CreatePersonaRequest = z.object({
@@ -7,6 +8,10 @@ export const CreatePersonaRequest = z.object({
   bio: z.string().max(280).optional(),
 });
 export type CreatePersonaRequest = z.infer<typeof CreatePersonaRequest>;
+
+export interface CreatePersonaResponse {
+  persona: Pick<Persona, 'id' | 'username' | 'displayName' | 'did' | 'bio' | 'isDefault'>;
+}
 
 export const SwitchPersonaRequest = z.object({
   personaId: z.string().uuid(),
