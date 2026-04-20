@@ -1,0 +1,30 @@
+# Default: treat as text, store LF in repo, check out LF on all platforms.
+* text=auto eol=lf
+
+# Explicit binaries — never normalized, never diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.avif binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.pdf binary
+*.zip binary
+*.gz binary
+
+# Lockfile — text, but explicit LF so no tool ever "helpfully" flips it.
+pnpm-lock.yaml text eol=lf
+
+# Shell scripts must be LF regardless of platform.
+*.sh text eol=lf
+
+# Windows-only files that genuinely need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
