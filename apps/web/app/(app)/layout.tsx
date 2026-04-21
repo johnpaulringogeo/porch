@@ -19,6 +19,7 @@ import { useAuth } from '@/lib/auth-context';
  */
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string }> = [
   { href: '/dashboard', label: 'Home' },
+  { href: '/feed', label: 'Feed' },
   { href: '/contacts', label: 'Contacts' },
 ];
 
