@@ -86,6 +86,14 @@ interface AuthContextValue extends AuthState {
    * Throws an ApiError on bad target / archived / suspended persona.
    */
   switchPersona: (personaId: string) => Promise<SessionResponse>;
+  /**
+   * Force a session refresh. Useful after a mutation that changes server-
+   * side profile fields visible in the SessionResponse (displayName, email
+   * verification state, …) — calling this makes the header and anything
+   * else reading `session.persona.*` re-render against fresh data without
+   * waiting for the scheduled refresh timer to fire.
+   */
+  refreshSession: () => Promise<void>;
   /** Exposed primarily for the API helper — the current access token, or
    * `null` if not signed in. */
   accessToken: string | null;
@@ -229,8 +237,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       logout,
       switchPersona,
+      refreshSession: doRefresh,
     }),
-    [state, signup, login, logout, switchPersona],
+    [state, signup, login, logout, switchPersona, doRefresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

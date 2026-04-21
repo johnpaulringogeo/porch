@@ -169,11 +169,15 @@ function ProfileHeader({
             <p className="mt-3 whitespace-pre-wrap text-sm">{profile.bio}</p>
           ) : null}
         </div>
-        <ContactStatusAction
-          profile={profile}
-          isSelf={isSelf}
-          onStatusChange={onContactStatusChange}
-        />
+        {isSelf ? (
+          <EditProfileLink />
+        ) : (
+          <ContactStatusAction
+            profile={profile}
+            isSelf={isSelf}
+            onStatusChange={onContactStatusChange}
+          />
+        )}
       </div>
       <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[hsl(var(--text-muted))]">
         <div className="flex items-center gap-1">
@@ -182,6 +186,24 @@ function ProfileHeader({
         </div>
       </dl>
     </section>
+  );
+}
+
+// ── Self action ───────────────────────────────────────────────────────────
+
+/**
+ * Rendered in the CTA slot when the viewer is looking at their own profile.
+ * Links to `/settings/profile`, which edits the currently-active persona —
+ * i.e. this one, because `isSelf` is computed from session.persona.id.
+ */
+function EditProfileLink() {
+  return (
+    <Link
+      href="/settings/profile"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[hsl(var(--border-default))] bg-[hsl(var(--surface-default))] px-3 py-1.5 text-xs font-medium hover:bg-[hsl(var(--surface-muted))]"
+    >
+      Edit profile
+    </Link>
   );
 }
 

@@ -8,11 +8,13 @@ import {
   CreatePersonaRequest,
   ListPersonaPostsQuery,
   SwitchPersonaRequest,
+  UpdatePersonaRequest,
   type CreatePersonaResponse,
   type GetPersonaProfileResponse,
   type ListMyPersonasResponse,
   type ListPersonaPostsResponse,
   type SessionResponse,
+  type UpdatePersonaResponse,
 } from '@porch/types/api';
 import { requireAuth } from '../middleware/auth.js';
 import type { Actor, AppBindings } from '../bindings.js';
@@ -23,7 +25,7 @@ import type { Actor, AppBindings } from '../bindings.js';
  *   GET    /                       list my personas
  *   POST   /                       create a new persona
  *   POST   /switch                 switch active persona (mints a fresh access token)
- *   PATCH  /:personaId             update persona              (stub)
+ *   PATCH  /:personaId             update persona (displayName / bio)
  *   POST   /:personaId/archive     archive persona             (stub)
  *   GET    /:username/profile      public profile
  *   GET    /:username/posts        viewer-scoped post list (paginated)
@@ -236,9 +238,64 @@ personaRoutes.post('/switch', async (c) => {
   return c.json(payload);
 });
 
+// ── Update persona ─────────────────────────────────────────────────────────
+
+/**
+ * PATCH /api/personas/:personaId
+ *
+ * Edit the displayName and/or bio of a persona the viewer owns. Ownership
+ * is enforced inside PersonaOps.updatePersona; archived/suspended targets
+ * are rejected symmetrically with /switch so the lifecycle behaves the
+ * same across mutation endpoints. Empty patches are no-op.
+ */
+personaRoutes.patch('/:personaId', async (c) => {
+  const actor = requireActor(c);
+  const personaId = c.req.param('personaId');
+  const body = UpdatePersonaRequest.parse(await c.req.json());
+
+  const updated = await PersonaOps.updatePersona(
+    c.var.db,
+    actor.accountId,
+    personaId,
+    { displayName: body.displayName, bio: body.bio },
+  );
+
+  const { ipAddress, userAgent } = clientInfo(c);
+  void AuditOps.recordAudit(c.var.db, {
+    accountId: actor.accountId,
+    personaId: updated.id,
+    action: 'persona.update',
+    entityType: 'persona',
+    entityId: updated.id,
+    // Log only the keys that changed, not the values — bio text can be
+    // personally identifying and the audit log is lower-sensitivity than
+    // the row itself.
+    metadata: {
+      fields: [
+        ...(body.displayName !== undefined ? ['displayName'] : []),
+        ...(body.bio !== undefined ? ['bio'] : []),
+      ],
+    },
+    ipAddress,
+    userAgent,
+  });
+
+  const payload: UpdatePersonaResponse = {
+    persona: {
+      id: updated.id,
+      username: updated.username,
+      displayName: updated.displayName,
+      did: updated.did,
+      bio: updated.bio,
+      avatarUrl: updated.avatarUrl,
+      isDefault: updated.isDefault,
+    },
+  };
+  return c.json(payload);
+});
+
 // ── Stubs (post-v0) ────────────────────────────────────────────────────────
 
-personaRoutes.patch('/:personaId', (c) => c.json({ todo: 'update persona' }, 501));
 personaRoutes.post('/:personaId/archive', (c) => c.json({ todo: 'archive persona' }, 501));
 
 // ── Helpers ────────────────────────────────────────────────────────────────

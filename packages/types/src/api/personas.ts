@@ -24,6 +24,21 @@ export const UpdatePersonaRequest = z.object({
 });
 export type UpdatePersonaRequest = z.infer<typeof UpdatePersonaRequest>;
 
+/**
+ * PATCH /api/personas/:personaId
+ *
+ * Mirrors CreatePersonaResponse so the client can swap the new shape into
+ * any cached MyPersona/PublicProfile entry without a follow-up fetch. The
+ * route enforces ownership and rejects archived/suspended targets, so any
+ * 200 here is safe to apply optimistically.
+ */
+export interface UpdatePersonaResponse {
+  persona: Pick<
+    Persona,
+    'id' | 'username' | 'displayName' | 'did' | 'bio' | 'avatarUrl' | 'isDefault'
+  >;
+}
+
 // ── My personas (signed-in viewer) ────────────────────────────────────────
 
 /**
