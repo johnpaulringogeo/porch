@@ -26,4 +26,9 @@ export { editPost } from './update.js';
 export { deletePost } from './delete.js';
 export { listMyPosts } from './list.js';
 export type { ListMyPostsParams, ListMyPostsResult } from './list.js';
+export { listPersonaPosts } from './list-persona.js';
+export type {
+  ListPersonaPostsParams,
+  ListPersonaPostsResult,
+} from './list-persona.js';
 export { toApiPost } from './helpers.js';

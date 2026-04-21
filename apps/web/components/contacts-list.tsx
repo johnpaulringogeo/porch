@@ -21,6 +21,7 @@ import type { Contact } from '@porch/types/domain';
 import type { ListContactsResponse } from '@porch/types/api';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { UsernameLink } from '@/components/username-link';
 
 interface ContactsListProps {
   refreshKey: number;
@@ -143,10 +144,16 @@ export const ContactsList = forwardRef<ContactsListHandle, ContactsListProps>(
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{c.persona.displayName}</p>
-                  <p className="text-xs text-[hsl(var(--text-muted))]">
-                    @{c.persona.username}
-                  </p>
+                  <UsernameLink
+                    username={c.persona.username}
+                    className="text-sm font-medium underline-offset-2 hover:underline"
+                  >
+                    {c.persona.displayName}
+                  </UsernameLink>
+                  <UsernameLink
+                    username={c.persona.username}
+                    className="block text-xs text-[hsl(var(--text-muted))] underline-offset-2 hover:underline"
+                  />
                 </div>
                 <button
                   type="button"

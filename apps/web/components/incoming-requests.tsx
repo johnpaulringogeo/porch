@@ -19,6 +19,7 @@ import type {
 } from '@porch/types/api';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { UsernameLink } from '@/components/username-link';
 
 interface IncomingRequestsProps {
   refreshKey: number;
@@ -133,10 +134,16 @@ export function IncomingRequests({
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">{req.from.displayName}</p>
-                <p className="text-xs text-[hsl(var(--text-muted))]">
-                  @{req.from.username}
-                </p>
+                <UsernameLink
+                  username={req.from.username}
+                  className="text-sm font-medium underline-offset-2 hover:underline"
+                >
+                  {req.from.displayName}
+                </UsernameLink>
+                <UsernameLink
+                  username={req.from.username}
+                  className="block text-xs text-[hsl(var(--text-muted))] underline-offset-2 hover:underline"
+                />
                 {req.message ? (
                   <p className="mt-2 whitespace-pre-wrap text-sm">{req.message}</p>
                 ) : null}

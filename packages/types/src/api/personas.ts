@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Persona } from '../domain/index.js';
+import type { Persona, Post, PublicPersona } from '../domain/index.js';
 import { usernameRegex } from './auth.js';
 
 export const CreatePersonaRequest = z.object({
@@ -23,3 +23,71 @@ export const UpdatePersonaRequest = z.object({
   bio: z.string().max(280).nullable().optional(),
 });
 export type UpdatePersonaRequest = z.infer<typeof UpdatePersonaRequest>;
+
+// ── Public profile ────────────────────────────────────────────────────────
+
+/**
+ * Relationship between the viewer and the profile subject. Drives the
+ * primary CTA on the profile page:
+ *   self              — no CTA (edit lives elsewhere in later milestones)
+ *   contact           — already mutual; surface a "You're contacts" chip
+ *   pending_outgoing  — viewer has an open request to this persona
+ *   pending_incoming  — this persona has sent the viewer a request
+ *   none              — no relationship; surface "Send contact request"
+ *
+ * Note: existence of a request in either direction is knowledge the viewer
+ * already has access to via /contacts — we're not leaking anything new by
+ * surfacing it here. Moderation-suspended profiles short-circuit to 404
+ * before we ever compute this, so status is always resolvable.
+ */
+export const ContactStatus = {
+  Self: 'self',
+  Contact: 'contact',
+  PendingOutgoing: 'pending_outgoing',
+  PendingIncoming: 'pending_incoming',
+  None: 'none',
+} as const;
+export type ContactStatus = (typeof ContactStatus)[keyof typeof ContactStatus];
+
+/**
+ * What a profile page renders. Strictly a superset of PublicPersona — we
+ * intentionally don't expose moderationState/isDefault here; restricted
+ * profiles are still visible, but the flag stays server-side.
+ *
+ * `postCount` is the count visible to the *viewer* — author sees their
+ * full count, others see only posts they could have read individually.
+ * This avoids surfacing a number that doesn't match the list below.
+ */
+export interface PublicProfile extends PublicPersona {
+  joinedAt: string;
+  postCount: number;
+  contactStatus: ContactStatus;
+}
+
+/**
+ * GET /api/personas/:username/profile
+ */
+export interface GetPersonaProfileResponse {
+  profile: PublicProfile;
+}
+
+/**
+ * GET /api/personas/:username/posts
+ *
+ *   ?cursor   opaque keyset cursor shared with the feed/my-posts codec
+ *   ?limit    1..100, default 50
+ *
+ * Returns only posts the caller is allowed to see (same rules as getPost).
+ * The list is empty — not 404 — for a valid profile with no visible posts,
+ * so the UI can say "nothing visible yet" without guessing.
+ */
+export const ListPersonaPostsQuery = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ListPersonaPostsQuery = z.infer<typeof ListPersonaPostsQuery>;
+
+export interface ListPersonaPostsResponse {
+  posts: Post[];
+  nextCursor: string | null;
+}

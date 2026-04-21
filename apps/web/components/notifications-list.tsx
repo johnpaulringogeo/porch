@@ -30,6 +30,7 @@ import { NotificationType } from '@porch/types/domain';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useNotifications } from '@/lib/notifications-context';
+import { UsernameLink } from '@/components/username-link';
 
 export function NotificationsList() {
   const { accessToken } = useAuth();
@@ -328,14 +329,23 @@ export function NotificationsList() {
  * blank @-handle.
  */
 function NotificationBody({ notification: n }: { notification: ApiNotification }) {
-  const actorHandle = n.actor ? `@${n.actor.username}` : 'Someone';
+  // When we have an actor, render their handle as a link to their profile.
+  // When we don't (null actor / non-actor types), keep the "Someone" copy —
+  // UsernameLink would otherwise point at a dead profile.
+  const actorEl = n.actor ? (
+    <UsernameLink
+      username={n.actor.username}
+      className="font-medium underline-offset-2 hover:underline"
+    />
+  ) : (
+    <strong className="font-medium">Someone</strong>
+  );
 
   switch (n.type) {
     case NotificationType.ContactRequestReceived:
       return (
         <p>
-          <strong className="font-medium">{actorHandle}</strong>{' '}
-          sent you a contact request.{' '}
+          {actorEl} sent you a contact request.{' '}
           <Link
             href="/contacts"
             className="text-mode-home underline-offset-2 hover:underline"
@@ -347,8 +357,7 @@ function NotificationBody({ notification: n }: { notification: ApiNotification }
     case NotificationType.ContactRequestAccepted:
       return (
         <p>
-          <strong className="font-medium">{actorHandle}</strong>{' '}
-          accepted your contact request.{' '}
+          {actorEl} accepted your contact request.{' '}
           <Link
             href="/contacts"
             className="text-mode-home underline-offset-2 hover:underline"
@@ -360,12 +369,7 @@ function NotificationBody({ notification: n }: { notification: ApiNotification }
     case NotificationType.ContactRequestDeclined:
       // No destination — just surface the fact; the contact bundle UI already
       // reflects the state. Kept terse intentionally.
-      return (
-        <p>
-          <strong className="font-medium">{actorHandle}</strong>{' '}
-          declined your contact request.
-        </p>
-      );
+      return <p>{actorEl} declined your contact request.</p>;
     case NotificationType.PostModerated:
       return (
         <p>

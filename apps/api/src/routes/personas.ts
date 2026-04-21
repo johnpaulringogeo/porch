@@ -1,10 +1,16 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { PersonaOps, AuditOps } from '@porch/core';
+import { PersonaOps, PostOps, AuditOps } from '@porch/core';
 import { ErrorCode, PorchError } from '@porch/types';
-import { CreatePersonaRequest, type CreatePersonaResponse } from '@porch/types/api';
+import {
+  CreatePersonaRequest,
+  ListPersonaPostsQuery,
+  type CreatePersonaResponse,
+  type GetPersonaProfileResponse,
+  type ListPersonaPostsResponse,
+} from '@porch/types/api';
 import { requireAuth } from '../middleware/auth.js';
-import type { AppBindings } from '../bindings.js';
+import type { Actor, AppBindings } from '../bindings.js';
 
 /**
  * Persona routes.
@@ -14,7 +20,8 @@ import type { AppBindings } from '../bindings.js';
  *   POST   /switch                 switch active persona       (stub)
  *   PATCH  /:personaId             update persona              (stub)
  *   POST   /:personaId/archive     archive persona             (stub)
- *   GET    /:username/profile      public profile              (stub)
+ *   GET    /:username/profile      public profile
+ *   GET    /:username/posts        viewer-scoped post list (paginated)
  *
  * All routes require a valid access token; requireAuth populates `c.var.actor`.
  */
@@ -79,14 +86,66 @@ personaRoutes.post('/', async (c) => {
   return c.json(payload, 201);
 });
 
+// ── Profile / posts ────────────────────────────────────────────────────────
+
+personaRoutes.get('/:username/profile', async (c) => {
+  const actor = requireActor(c);
+  const username = c.req.param('username');
+  const profile = await PersonaOps.getPublicProfile(
+    c.var.db,
+    { personaId: actor.personaId },
+    username,
+  );
+  const payload: GetPersonaProfileResponse = { profile };
+  return c.json(payload);
+});
+
+personaRoutes.get('/:username/posts', async (c) => {
+  const actor = requireActor(c);
+  const username = c.req.param('username');
+
+  // Resolve the author persona through the same gate the profile route uses
+  // (archived/suspended both surface as NotFound) so an invisible author
+  // can't leak posts via this endpoint.
+  const author = await PersonaOps.getPersonaByUsername(c.var.db, username);
+  if (!author) {
+    throw new PorchError(ErrorCode.NotFound, 'No such user.');
+  }
+
+  const parsed = ListPersonaPostsQuery.parse({
+    cursor: c.req.query('cursor'),
+    limit: c.req.query('limit'),
+  });
+
+  const result = await PostOps.listPersonaPosts(
+    c.var.db,
+    { personaId: actor.personaId },
+    author.id,
+    { cursor: parsed.cursor, limit: parsed.limit },
+  );
+
+  const payload: ListPersonaPostsResponse = {
+    posts: result.posts,
+    nextCursor: result.nextCursor,
+  };
+  return c.json(payload);
+});
+
 // ── Stubs (post-v0) ────────────────────────────────────────────────────────
 
 personaRoutes.post('/switch', (c) => c.json({ todo: 'switch persona' }, 501));
 personaRoutes.patch('/:personaId', (c) => c.json({ todo: 'update persona' }, 501));
 personaRoutes.post('/:personaId/archive', (c) => c.json({ todo: 'archive persona' }, 501));
-personaRoutes.get('/:username/profile', (c) => c.json({ todo: 'public profile' }, 501));
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+function requireActor(c: Context<AppBindings>): Actor {
+  const actor = c.var.actor;
+  if (!actor) {
+    throw new PorchError(ErrorCode.Unauthorized, 'Missing actor context');
+  }
+  return actor;
+}
 
 /**
  * Best-effort client-IP / user-agent extraction. Matches the helper in

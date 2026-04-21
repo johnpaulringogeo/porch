@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useNotifications } from '@/lib/notifications-context';
+import { UsernameLink } from '@/components/username-link';
 
 /**
  * Top-level nav items for the authenticated header. The `badge` key names
@@ -120,9 +121,10 @@ export default function AppLayout({
             </ul>
           </nav>
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-[hsl(var(--text-muted))]">
-              @{session.persona.username}
-            </span>
+            <UsernameLink
+              username={session.persona.username}
+              className="text-[hsl(var(--text-muted))] underline-offset-2 hover:underline"
+            />
             <button
               type="button"
               onClick={() => {
