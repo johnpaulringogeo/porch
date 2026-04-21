@@ -11,9 +11,11 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { Post } from '@porch/types/domain';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { formatTimestamp } from '@/lib/format-time';
 
 interface MyPostsProps {
   refreshKey: number;
@@ -105,7 +107,14 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
             <div className="min-w-0 flex-1">
               <p className="whitespace-pre-wrap text-sm">{post.content}</p>
               <p className="mt-2 flex items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
-                <time dateTime={post.createdAt}>{formatTimestamp(post.createdAt)}</time>
+                <Link
+                  href={`/p/${post.id}`}
+                  className="underline-offset-2 hover:underline"
+                >
+                  <time dateTime={post.createdAt}>
+                    {formatTimestamp(post.createdAt)}
+                  </time>
+                </Link>
                 {post.editedAt ? <span>· edited</span> : null}
                 {post.moderationState !== 'ok' ? (
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
@@ -127,20 +136,4 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
       ))}
     </ul>
   );
-}
-
-/**
- * Short, locale-aware timestamp. SSR renders the ISO; client upgrades to the
- * user's locale. We accept the hydration flash — a brief ISO is less bad than
- * shipping an i18n lib for one label.
- */
-function formatTimestamp(iso: string): string {
-  if (typeof window === 'undefined') return iso;
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
 }

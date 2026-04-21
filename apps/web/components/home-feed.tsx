@@ -11,10 +11,12 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { HomeFeedResponse } from '@porch/types/api';
 import type { Post } from '@porch/types/domain';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { formatTimestamp } from '@/lib/format-time';
 import { UsernameLink } from '@/components/username-link';
 
 export function HomeFeed() {
@@ -118,7 +120,14 @@ export function HomeFeed() {
             </header>
             <p className="mt-2 whitespace-pre-wrap text-sm">{post.content}</p>
             <footer className="mt-3 flex items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
-              <time dateTime={post.createdAt}>{formatTimestamp(post.createdAt)}</time>
+              <Link
+                href={`/p/${post.id}`}
+                className="underline-offset-2 hover:underline"
+              >
+                <time dateTime={post.createdAt}>
+                  {formatTimestamp(post.createdAt)}
+                </time>
+              </Link>
               {post.editedAt ? <span>· edited</span> : null}
               {post.moderationState === 'limited' ? (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
@@ -155,20 +164,4 @@ export function HomeFeed() {
       ) : null}
     </div>
   );
-}
-
-/**
- * Short, locale-aware timestamp. Mirrors the helper in my-posts.tsx —
- * duplicated for now; when a third post view lands we'll lift it into
- * @/lib.
- */
-function formatTimestamp(iso: string): string {
-  if (typeof window === 'undefined') return iso;
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
 }

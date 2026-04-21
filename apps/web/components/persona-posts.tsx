@@ -17,10 +17,12 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { ListPersonaPostsResponse } from '@porch/types/api';
 import type { Post } from '@porch/types/domain';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { formatTimestamp } from '@/lib/format-time';
 
 interface PersonaPostsProps {
   username: string;
@@ -116,9 +118,14 @@ export function PersonaPosts({ username, isSelf }: PersonaPostsProps) {
           >
             <p className="whitespace-pre-wrap text-sm">{post.content}</p>
             <footer className="mt-3 flex items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
-              <time dateTime={post.createdAt}>
-                {formatTimestamp(post.createdAt)}
-              </time>
+              <Link
+                href={`/p/${post.id}`}
+                className="underline-offset-2 hover:underline"
+              >
+                <time dateTime={post.createdAt}>
+                  {formatTimestamp(post.createdAt)}
+                </time>
+              </Link>
               {post.editedAt ? <span>· edited</span> : null}
               {post.moderationState === 'limited' ? (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
@@ -154,20 +161,4 @@ export function PersonaPosts({ username, isSelf }: PersonaPostsProps) {
       ) : null}
     </div>
   );
-}
-
-/**
- * Short, locale-aware timestamp. Same helper lives in home-feed /
- * my-posts / notifications-list — kept duplicated until the fourth use
- * lands, at which point it's clearly earned a @/lib home.
- */
-function formatTimestamp(iso: string): string {
-  if (typeof window === 'undefined') return iso;
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
 }
