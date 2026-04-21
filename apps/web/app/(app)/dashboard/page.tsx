@@ -1,6 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { Compose } from '@/components/compose';
+import { MyPosts } from '@/components/my-posts';
 
 /**
  * Mode metadata with *literal* class strings so Tailwind JIT picks them up.
@@ -15,12 +18,16 @@ const MODES = [
 ] as const;
 
 /**
- * Placeholder "you are logged in" page. The real mode dashboards land in
- * later milestones; for now we just confirm the session is live and give
- * Matt something to stare at that proves the full stack works.
+ * Home dashboard. In v0 this is where you compose a post and see your own
+ * recent posts. The cross-persona feed will live in its own route once we
+ * have more than one author aggregating in.
  */
 export default function DashboardPage() {
   const { session } = useAuth();
+  // Bumping this key re-mounts MyPosts' data effect to re-fetch — cheaper
+  // than optimistic prepend + reconcile at v0 scale.
+  const [refreshKey, setRefreshKey] = useState(0);
+
   if (!session) return null; // the layout already handled this
 
   const { account, persona } = session;
@@ -41,10 +48,21 @@ export default function DashboardPage() {
           Welcome, {persona.displayName}.
         </h1>
         <p className="text-sm text-[hsl(var(--text-muted))]">
-          The five-mode experience is under construction. Home is the only
-          mode live in v0 — for now this page just proves auth works
-          end-to-end.
+          Post something to your contacts below. Home-mode posts are only
+          visible to personas you&apos;re mutual contacts with.
         </p>
+      </section>
+
+      <section className="rounded-lg border border-[hsl(var(--border-default))] bg-[hsl(var(--surface-muted))] p-5">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[hsl(var(--text-muted))]">
+          Compose
+        </h2>
+        <Compose onPosted={() => setRefreshKey((k) => k + 1)} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Your posts</h2>
+        <MyPosts refreshKey={refreshKey} />
       </section>
 
       <section className="rounded-lg border border-[hsl(var(--border-default))] bg-[hsl(var(--surface-muted))] p-6">
