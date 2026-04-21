@@ -9,6 +9,7 @@ import {
   ListPersonaPostsQuery,
   SwitchPersonaRequest,
   UpdatePersonaRequest,
+  type ArchivePersonaResponse,
   type CreatePersonaResponse,
   type GetPersonaProfileResponse,
   type ListMyPersonasResponse,
@@ -26,7 +27,7 @@ import type { Actor, AppBindings } from '../bindings.js';
  *   POST   /                       create a new persona
  *   POST   /switch                 switch active persona (mints a fresh access token)
  *   PATCH  /:personaId             update persona (displayName / bio)
- *   POST   /:personaId/archive     archive persona             (stub)
+ *   POST   /:personaId/archive     soft-delete persona (sets archivedAt)
  *   GET    /:username/profile      public profile
  *   GET    /:username/posts        viewer-scoped post list (paginated)
  *
@@ -294,9 +295,57 @@ personaRoutes.patch('/:personaId', async (c) => {
   return c.json(payload);
 });
 
-// ── Stubs (post-v0) ────────────────────────────────────────────────────────
+// ── Archive persona ────────────────────────────────────────────────────────
 
-personaRoutes.post('/:personaId/archive', (c) => c.json({ todo: 'archive persona' }, 501));
+/**
+ * POST /api/personas/:personaId/archive
+ *
+ * Soft-delete a persona. The active persona is intentionally rejected here
+ * (409) — archiving the persona you're currently acting as would leave the
+ * session pointing at a hidden row. The UI should switch first; this route
+ * doesn't auto-switch on the user's behalf so the side-effect stays
+ * explicit. Default-persona and already-archived also 409; suspended 403.
+ */
+personaRoutes.post('/:personaId/archive', async (c) => {
+  const actor = requireActor(c);
+  const personaId = c.req.param('personaId');
+
+  const archived = await PersonaOps.archivePersona(
+    c.var.db,
+    actor.accountId,
+    actor.personaId,
+    personaId,
+  );
+
+  const { ipAddress, userAgent } = clientInfo(c);
+  void AuditOps.recordAudit(c.var.db, {
+    accountId: actor.accountId,
+    personaId: archived.id,
+    action: 'persona.archive',
+    entityType: 'persona',
+    entityId: archived.id,
+    ipAddress,
+    userAgent,
+  });
+
+  // archivedAt was just set above — assert non-null for the type system.
+  // If it's somehow null we'd rather throw an InternalError than serialize
+  // a corrupt response.
+  if (!archived.archivedAt) {
+    throw new PorchError(
+      ErrorCode.InternalError,
+      'archivePersona returned a row with no archivedAt.',
+    );
+  }
+
+  const payload: ArchivePersonaResponse = {
+    persona: {
+      id: archived.id,
+      archivedAt: archived.archivedAt.toISOString(),
+    },
+  };
+  return c.json(payload);
+});
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

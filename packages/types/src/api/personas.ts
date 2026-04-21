@@ -39,6 +39,27 @@ export interface UpdatePersonaResponse {
   >;
 }
 
+/**
+ * POST /api/personas/:personaId/archive
+ *
+ * Soft-deletes a persona — sets `archivedAt` to now. The server rejects:
+ *   - the default persona                     (409 — account invariant)
+ *   - the currently active persona            (409 — switch first)
+ *   - an already-archived persona             (409 — nothing to do)
+ *   - a suspended persona                     (403 — moderation)
+ *
+ * The response is deliberately minimal: the caller already knows the full
+ * persona shape (from /api/personas). All we need back is the id it acted
+ * on and the archivedAt stamp so the UI can either drop the row or render
+ * an "archived at …" state if we ever surface archived personas.
+ */
+export interface ArchivePersonaResponse {
+  persona: {
+    id: string;
+    archivedAt: string;
+  };
+}
+
 // ── My personas (signed-in viewer) ────────────────────────────────────────
 
 /**

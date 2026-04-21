@@ -231,6 +231,14 @@ export function PersonaSwitcher() {
           >
             View profile
           </Link>
+          <Link
+            href="/settings/personas"
+            onClick={() => setOpen(false)}
+            className="block rounded-md px-3 py-2 text-sm hover:bg-[hsl(var(--surface-muted))]"
+            role="menuitem"
+          >
+            Manage personas
+          </Link>
           <button
             type="button"
             role="menuitem"
