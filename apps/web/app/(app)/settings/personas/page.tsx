@@ -138,12 +138,20 @@ export default function ManagePersonasPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Personas</h1>
-        <p className="text-sm text-[hsl(var(--text-muted))]">
-          Switch between personas or archive ones you no longer use. Your
-          default persona can&apos;t be archived.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Personas</h1>
+          <p className="text-sm text-[hsl(var(--text-muted))]">
+            Switch between personas or archive ones you no longer use. Your
+            default persona can&apos;t be archived.
+          </p>
+        </div>
+        <Link
+          href="/settings/personas/new"
+          className="inline-flex flex-none items-center rounded-md bg-mode-home px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
+        >
+          Create persona
+        </Link>
       </header>
 
       {loadError ? (
