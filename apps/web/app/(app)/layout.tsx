@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useNotifications } from '@/lib/notifications-context';
-import { UsernameLink } from '@/components/username-link';
+import { PersonaSwitcher } from '@/components/persona-switcher';
 
 /**
  * Top-level nav items for the authenticated header. The `badge` key names
@@ -41,7 +41,7 @@ export default function AppLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { session, loading, logout } = useAuth();
+  const { session, loading } = useAuth();
   const { unreadCount } = useNotifications();
 
   useEffect(() => {
@@ -120,20 +120,8 @@ export default function AppLayout({
               })}
             </ul>
           </nav>
-          <div className="flex items-center gap-4 text-sm">
-            <UsernameLink
-              username={session.persona.username}
-              className="text-[hsl(var(--text-muted))] underline-offset-2 hover:underline"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                void logout().then(() => router.replace('/'));
-              }}
-              className="rounded-md border border-[hsl(var(--border-default))] px-3 py-1 text-xs hover:bg-[hsl(var(--surface-muted))]"
-            >
-              Log out
-            </button>
+          <div className="flex items-center gap-2 text-sm">
+            <PersonaSwitcher />
           </div>
         </div>
       </header>

@@ -6,6 +6,13 @@ export interface Actor {
   personaId: string;
   username: string;
   did: string;
+  /**
+   * ID of the session row backing this request. Populated from the JWT's
+   * `sid` claim by requireAuth — non-auth-gated routes won't have it.
+   * Used by POST /personas/switch to mutate session.active_persona_id
+   * without relying on the refresh cookie (scoped to /api/auth).
+   */
+  sessionId: string;
 }
 
 /**

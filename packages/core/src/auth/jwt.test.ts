@@ -13,6 +13,7 @@ const PAYLOAD = {
   persona: 'persona_01H8ABC',
   did: 'did:web:porch.example.com:users:alice',
   username: 'alice',
+  sid: 'session_01H8ABC',
 };
 
 describe('signAccessToken / verifyAccessToken', () => {
@@ -25,6 +26,7 @@ describe('signAccessToken / verifyAccessToken', () => {
     expect(claims.persona).toBe(PAYLOAD.persona);
     expect(claims.did).toBe(PAYLOAD.did);
     expect(claims.username).toBe(PAYLOAD.username);
+    expect(claims.sid).toBe(PAYLOAD.sid);
     expect(claims.jti).toBe(jti);
     expect(typeof claims.iat).toBe('number');
     expect(typeof claims.exp).toBe('number');

@@ -23,6 +23,7 @@ export const requireAuth: MiddlewareHandler<AppBindings> = async (c, next) => {
       personaId: claims.persona,
       username: claims.username,
       did: claims.did,
+      sessionId: claims.sid,
     });
   } catch {
     throw new PorchError(ErrorCode.Unauthorized, 'Invalid or expired access token');

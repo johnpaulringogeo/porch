@@ -79,6 +79,13 @@ interface AuthContextValue extends AuthState {
   signup: (input: SignupInput) => Promise<SessionResponse>;
   login: (input: LoginInput) => Promise<SessionResponse>;
   logout: () => Promise<void>;
+  /**
+   * Switch to a different persona owned by the same account. Mints a new
+   * access token server-side (keyed by the session ID in the current
+   * JWT), replaces our session state, and reschedules the refresh timer.
+   * Throws an ApiError on bad target / archived / suspended persona.
+   */
+  switchPersona: (personaId: string) => Promise<SessionResponse>;
   /** Exposed primarily for the API helper — the current access token, or
    * `null` if not signed in. */
   accessToken: string | null;
@@ -174,6 +181,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [doRefresh, scheduleRefresh],
   );
 
+  const switchPersona = useCallback(
+    async (personaId: string): Promise<SessionResponse> => {
+      const current = state.session;
+      if (!current) {
+        // Defensive — the UI guards every call site with a session, but an
+        // ApiError keeps the failure in the same shape the caller handles
+        // for bad-target / archived-persona cases.
+        throw new ApiError(401, {
+          code: 'UNAUTHORIZED',
+          message: 'Not signed in.',
+        });
+      }
+      const session = await api<SessionResponse>({
+        method: 'POST',
+        path: '/api/personas/switch',
+        body: { personaId },
+        accessToken: current.session.accessToken,
+      });
+      setState({ session, loading: false });
+      scheduleRefresh(session.session.expiresAt, doRefresh);
+      return session;
+    },
+    [state, doRefresh, scheduleRefresh],
+  );
+
   const logout = useCallback(async (): Promise<void> => {
     try {
       await api<void>({ method: 'POST', path: '/api/auth/logout' });
@@ -196,8 +228,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signup,
       login,
       logout,
+      switchPersona,
     }),
-    [state, signup, login, logout],
+    [state, signup, login, logout, switchPersona],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

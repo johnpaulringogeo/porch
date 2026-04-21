@@ -24,6 +24,43 @@ export const UpdatePersonaRequest = z.object({
 });
 export type UpdatePersonaRequest = z.infer<typeof UpdatePersonaRequest>;
 
+// ── My personas (signed-in viewer) ────────────────────────────────────────
+
+/**
+ * The signed-in view of one of the viewer's own personas. Distinct from
+ * PublicPersona — this shape adds `isDefault`, `createdAt`, and the
+ * viewer-relative `isActive` flag so the switcher UI can render a check
+ * next to the currently-active persona without a second request.
+ *
+ * Archived personas are excluded from listings in v0; if they return here
+ * someday, add `archivedAt` to this interface rather than overloading the
+ * current shape with a null sentinel.
+ */
+export interface MyPersona {
+  id: string;
+  username: string;
+  did: string;
+  displayName: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  isDefault: boolean;
+  createdAt: string;
+  /** True iff this persona is the one the current session is acting as. */
+  isActive: boolean;
+}
+
+/**
+ * GET /api/personas
+ *
+ * Returns every non-archived persona belonging to the viewer's account,
+ * ordered default-first then by createdAt. Empty list is never expected in
+ * v0 because signup always creates a default persona, but the shape
+ * tolerates it so the UI can show an empty state if we ever loosen that.
+ */
+export interface ListMyPersonasResponse {
+  personas: MyPersona[];
+}
+
 // ── Public profile ────────────────────────────────────────────────────────
 
 /**

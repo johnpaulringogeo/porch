@@ -97,6 +97,7 @@ authRoutes.post('/signup', async (c) => {
     persona: createdPersona.id,
     did: createdPersona.did,
     username: createdPersona.username,
+    sid: sess.sessionId,
   });
 
   setRefreshCookie(c, sess.refreshToken);
@@ -225,6 +226,7 @@ authRoutes.post('/login', async (c) => {
     persona: defaultPersona.id,
     did: defaultPersona.did,
     username: defaultPersona.username,
+    sid: sess.sessionId,
   });
 
   setRefreshCookie(c, sess.refreshToken);
@@ -293,6 +295,7 @@ authRoutes.post('/refresh', async (c) => {
     persona: activePersona.id,
     did: activePersona.did,
     username: activePersona.username,
+    sid: rotated.sessionId,
   });
 
   setRefreshCookie(c, rotated.refreshToken);

@@ -12,6 +12,13 @@ export interface AccessTokenClaims {
   persona: string;
   did: string;
   username: string;
+  /**
+   * Session row ID. Lets authenticated routes locate the backing session
+   * without consulting the refresh-token cookie (scoped to /api/auth).
+   * Required for persona switching, since POST /personas/switch mutates
+   * session.active_persona_id and needs to know which row.
+   */
+  sid: string;
   iat: number;
   exp: number;
   jti: string;
@@ -32,6 +39,7 @@ export async function signAccessToken(
     persona: payload.persona,
     did: payload.did,
     username: payload.username,
+    sid: payload.sid,
   })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(payload.sub)
@@ -54,6 +62,7 @@ export async function verifyAccessToken(
     typeof payload.persona !== 'string' ||
     typeof payload.did !== 'string' ||
     typeof payload.username !== 'string' ||
+    typeof payload.sid !== 'string' ||
     typeof payload.iat !== 'number' ||
     typeof payload.exp !== 'number' ||
     typeof payload.jti !== 'string'
@@ -65,6 +74,7 @@ export async function verifyAccessToken(
     persona: payload.persona,
     did: payload.did,
     username: payload.username,
+    sid: payload.sid,
     iat: payload.iat,
     exp: payload.exp,
     jti: payload.jti,
