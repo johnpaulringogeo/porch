@@ -11,16 +11,26 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useNotifications } from '@/lib/notifications-context';
 
 /**
- * Top-level nav items for the authenticated header. Keeping this as a
- * constant next to the layout makes it trivial to add a `/feed` (or
- * similar) entry once that page ships — no routing indirection needed.
+ * Top-level nav items for the authenticated header. The `badge` key names
+ * which value-source to render next to the label — right now only the
+ * Notifications item opts in. Keeping it declarative means a future "DMs"
+ * or "Mentions" item can pick an existing or new badge source without
+ * growing a special-case branch in the JSX.
  */
-const NAV_ITEMS: ReadonlyArray<{ href: string; label: string }> = [
+type NavBadge = 'unread-notifications';
+
+const NAV_ITEMS: ReadonlyArray<{
+  href: string;
+  label: string;
+  badge?: NavBadge;
+}> = [
   { href: '/dashboard', label: 'Home' },
   { href: '/feed', label: 'Feed' },
   { href: '/contacts', label: 'Contacts' },
+  { href: '/notifications', label: 'Notifications', badge: 'unread-notifications' },
 ];
 
 export default function AppLayout({
@@ -31,6 +41,7 @@ export default function AppLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { session, loading, logout } = useAuth();
+  const { unreadCount } = useNotifications();
 
   useEffect(() => {
     if (!loading && session === null) {
@@ -74,6 +85,14 @@ export default function AppLayout({
               {NAV_ITEMS.map((item) => {
                 const active =
                   pathname === item.href || pathname.startsWith(`${item.href}/`);
+                // Resolve the badge value by source. Today there's only one
+                // source; the switch keeps the call-site readable when a
+                // second one lands.
+                const badgeCount =
+                  item.badge === 'unread-notifications'
+                    ? (unreadCount ?? 0)
+                    : 0;
+                const showBadge = badgeCount > 0;
                 return (
                   <li key={item.href}>
                     <Link
@@ -81,11 +100,19 @@ export default function AppLayout({
                       aria-current={active ? 'page' : undefined}
                       className={
                         active
-                          ? 'rounded-md bg-[hsl(var(--surface-muted))] px-3 py-1 text-sm font-medium'
-                          : 'rounded-md px-3 py-1 text-sm text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))]'
+                          ? 'inline-flex items-center gap-1.5 rounded-md bg-[hsl(var(--surface-muted))] px-3 py-1 text-sm font-medium'
+                          : 'inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-sm text-[hsl(var(--text-muted))] hover:bg-[hsl(var(--surface-muted))]'
                       }
                     >
                       {item.label}
+                      {showBadge ? (
+                        <span
+                          aria-label={`${badgeCount} unread`}
+                          className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-mode-home px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+                        >
+                          {badgeCount > 99 ? '99+' : badgeCount}
+                        </span>
+                      ) : null}
                     </Link>
                   </li>
                 );
