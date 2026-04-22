@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PostAudienceMode, PostMode, type FeedPage, type Post } from '../domain/post.js';
+import type { PublicPersona } from '../domain/persona.js';
 
 export const CreatePostRequest = z
   .object({
@@ -34,6 +35,18 @@ export interface CreatePostResponse {
 
 export interface GetPostResponse {
   post: Post;
+  /**
+   * The personas in the post's selected audience. Author-only:
+   *   - null when the viewer is not the author, or when the post is not in
+   *     `selected` audience mode (in which case "the audience" is just
+   *     "all contacts" and we don't enumerate it),
+   *   - an array (possibly empty, in pathological cases) when the viewer
+   *     is the author of a `selected`-audience post.
+   *
+   * Order matches the persona IDs the author submitted when creating the
+   * post, with any subsequently-removed contacts simply absent.
+   */
+  audiencePersonas: PublicPersona[] | null;
 }
 
 export interface EditPostResponse {

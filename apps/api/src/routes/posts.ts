@@ -52,12 +52,15 @@ postRoutes.get('/mine', async (c) => {
 
 postRoutes.get('/:id', async (c) => {
   const actor = requireActor(c);
-  const post = await PostOps.getPost(
+  const result = await PostOps.getPost(
     c.var.db,
     { personaId: actor.personaId },
     c.req.param('id'),
   );
-  const payload: GetPostResponse = { post };
+  const payload: GetPostResponse = {
+    post: result.post,
+    audiencePersonas: result.audiencePersonas,
+  };
   return c.json(payload);
 });
 
