@@ -140,6 +140,11 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
                     </time>
                   </Link>
                   {post.editedAt ? <span>· edited</span> : null}
+                  {post.audienceMode === 'selected' ? (
+                    <span className="rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ring-[hsl(var(--border-default))]">
+                      selected
+                    </span>
+                  ) : null}
                   {post.moderationState !== 'ok' ? (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
                       {post.moderationState.replace('_', ' ')}
