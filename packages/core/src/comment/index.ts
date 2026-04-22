@@ -3,11 +3,12 @@ import type { Database, PostComment as PostCommentRow } from '@porch/db';
 import { persona, postComment } from '@porch/db';
 import { ErrorCode, PorchError } from '@porch/types';
 import type { CommentSummary } from '@porch/types/api';
-import type { Comment, PublicPersona } from '@porch/types/domain';
+import { NotificationType, type Comment, type PublicPersona } from '@porch/types/domain';
 import { decodeCursor, encodeCursor } from '../feed/index.js';
 import { toPublicPersona } from '../contact/helpers.js';
 import { assertCanViewPost } from '../post/helpers.js';
 import type { PostActor } from '../post/create.js';
+import { createNotification } from '../notification/index.js';
 
 /**
  * Comments on posts — v0 CRUD.
@@ -68,7 +69,7 @@ export async function createComment(
   actor: CommentActor,
   input: CreateCommentInput,
 ): Promise<CreateCommentResult> {
-  await assertCanViewPost(db, actor, input.postId);
+  const postRow = await assertCanViewPost(db, actor, input.postId);
 
   const trimmed = input.content.trim();
   if (trimmed.length === 0) {
@@ -97,6 +98,29 @@ export async function createComment(
   if (!authorRow) throw new Error('Author persona vanished mid-comment');
 
   const commentSummary = await getCommentSummary(db, input.postId);
+
+  // Notify the post's author that someone commented on their post. Skip the
+  // fan-out for self-comments — commenting on your own post is a valid "I
+  // forgot to add…" follow-up (unlike self-likes, which we block outright)
+  // and pinging yourself for it would be noise.
+  //
+  // Fire-and-forget: a stuck notification write must not roll back the
+  // comment itself. Same pattern as PostLiked and PostSelectedAudience.
+  if (postRow.authorPersonaId !== actor.personaId) {
+    try {
+      await createNotification(db, {
+        recipientPersonaId: postRow.authorPersonaId,
+        type: NotificationType.CommentCreated,
+        payload: {
+          postId: input.postId,
+          commentId: row.id,
+          byPersonaId: actor.personaId,
+        },
+      });
+    } catch (err) {
+      console.error('comment-created-notify-failed', err);
+    }
+  }
 
   return {
     comment: toApiComment(row, toPublicPersona(authorRow)),

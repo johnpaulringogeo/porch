@@ -413,6 +413,29 @@ function NotificationBody({ notification: n }: { notification: ApiNotification }
         </p>
       );
     }
+    case NotificationType.CommentCreated: {
+      // Recipient is the post's author. The link points at the post itself
+      // (not a fragment to the comment) — the comments section is on the
+      // post detail page and loading it is the obvious destination. If we
+      // later want a #comment-<id> deep-link we can plumb it through, but in
+      // v0 the thread is short enough that the user lands on the page and
+      // sees the new comment immediately.
+      const postId =
+        typeof n.payload?.postId === 'string' ? n.payload.postId : null;
+      return (
+        <p>
+          {actorEl} commented on your post.{' '}
+          {postId ? (
+            <Link
+              href={`/p/${postId}`}
+              className="text-mode-home underline-offset-2 hover:underline"
+            >
+              View
+            </Link>
+          ) : null}
+        </p>
+      );
+    }
     case NotificationType.PostModerated:
       return (
         <p>

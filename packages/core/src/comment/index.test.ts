@@ -176,9 +176,14 @@ function makeCommentRow(
 
 beforeEach(() => {
   vi.mocked(assertCanViewPost).mockReset();
-  // Default: visibility gate resolves successfully. Tests that need it to
-  // reject call `mockRejectedValueOnce`.
-  vi.mocked(assertCanViewPost).mockResolvedValue({} as never);
+  // Default: visibility gate resolves to a post the *actor* authors. That's
+  // the "self-comment" path, which is valid (unlike self-likes) but skips
+  // fan-out. Making it the default keeps existing tests unaffected by the
+  // CommentCreated fan-out side effect; tests that want to exercise fan-out
+  // override the mock with a post owned by a different persona.
+  vi.mocked(assertCanViewPost).mockResolvedValue({
+    authorPersonaId: 'persona_actor_1',
+  } as never);
 });
 
 // ── createComment ──────────────────────────────────────────────────────────
@@ -293,6 +298,55 @@ describe('createComment', () => {
       'post_missing',
     );
     expect(inserts).toHaveLength(0);
+  });
+
+  it('fans out a CommentCreated notification to the post author on a non-author comment', async () => {
+    const { db, inserts, queueSelect, queueInsertReturning } = makeFakeDb();
+    // Override the default self-comment mock: the post is owned by a
+    // *different* persona than the actor, so the fan-out branch fires.
+    vi.mocked(assertCanViewPost).mockResolvedValueOnce({
+      authorPersonaId: 'persona_author',
+    } as never);
+    queueInsertReturning([makeCommentRow('c1', { content: 'nice post' })]);
+    queueSelect([makePersonaRow('persona_actor_1')]);
+    queueSelect([{ total: 1 }]);
+
+    await createComment(
+      db,
+      { personaId: 'persona_actor_1' },
+      { postId: 'post_1', content: 'nice post' },
+    );
+
+    // Two inserts: the comment itself, then the CommentCreated notification.
+    expect(inserts).toHaveLength(2);
+    expect(inserts[1]!.values).toMatchObject({
+      recipientPersonaId: 'persona_author',
+      type: 'comment_created',
+      payload: {
+        postId: 'post_1',
+        commentId: 'c1',
+        byPersonaId: 'persona_actor_1',
+      },
+    });
+  });
+
+  it('does not fan out a notification when the commenter is the post author', async () => {
+    const { db, inserts, queueSelect, queueInsertReturning } = makeFakeDb();
+    // Default mock (beforeEach) already resolves to a post authored by the
+    // actor. Commenting on your own post is valid but skips fan-out — pinging
+    // yourself would be noise.
+    queueInsertReturning([makeCommentRow('c1')]);
+    queueSelect([makePersonaRow('persona_actor_1')]);
+    queueSelect([{ total: 1 }]);
+
+    await createComment(
+      db,
+      { personaId: 'persona_actor_1' },
+      { postId: 'post_1', content: 'one more thing' },
+    );
+
+    // Only the comment insert — no notification.
+    expect(inserts).toHaveLength(1);
   });
 });
 

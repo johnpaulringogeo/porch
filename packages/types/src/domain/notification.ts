@@ -20,6 +20,20 @@ export const NotificationType = {
    * practice rare enough that we'd rather have an audit trail than dedupe.
    */
   PostLiked: 'post_liked',
+  /**
+   * Someone commented on one of the recipient's posts.
+   * Payload: { postId, commentId, byPersonaId }. Only fires when the
+   * commenter is *not* the post's author — self-comments are a valid "I
+   * forgot to add…" follow-up and notifying yourself would be noise.
+   *
+   * One row per comment; no deduping across rapid successive comments.
+   * Delete-then-recomment currently leaves the original notification row in
+   * place pointing at the deleted comment — the UI copes because the link
+   * resolves to the post (not the comment) and the deleted comment simply
+   * isn't in the thread. If this becomes a complaint we'll dismiss the
+   * notification alongside the soft delete.
+   */
+  CommentCreated: 'comment_created',
   PostModerated: 'post_moderated',
   AccountModerated: 'account_moderated',
   System: 'system',

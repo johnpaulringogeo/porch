@@ -264,9 +264,10 @@ type NotificationRow = typeof notification.$inferSelect;
 /**
  * Look up the persona referenced in a payload. v0 notifications use
  * either `fromPersonaId` (contact_request_received) or `byPersonaId`
- * (contact_request_accepted, post_selected_audience, post_liked).
- * Returns null when neither field is a string — including when the type
- * doesn't reference a persona at all (post_moderated, system, etc.).
+ * (contact_request_accepted, post_selected_audience, post_liked,
+ * comment_created). Returns null when neither field is a string —
+ * including when the type doesn't reference a persona at all
+ * (post_moderated, system, etc.).
  */
 function extractActorPersonaId(row: NotificationRow): string | null {
   const payload = (row.payload ?? null) as Record<string, unknown> | null;
