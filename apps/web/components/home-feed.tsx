@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { HomeFeedResponse } from '@porch/types/api';
+import type { HomeFeedResponse, LikeSummary } from '@porch/types/api';
 import type { Post } from '@porch/types/domain';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -22,6 +22,9 @@ import { UsernameLink } from '@/components/username-link';
 export function HomeFeed() {
   const { accessToken } = useAuth();
   const [posts, setPosts] = useState<Post[] | null>(null);
+  const [likeSummaries, setLikeSummaries] = useState<
+    Record<string, LikeSummary>
+  >({});
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +38,7 @@ export function HomeFeed() {
           signal,
         });
         setPosts(res.posts);
+        setLikeSummaries(res.likeSummaries);
         setCursor(res.nextCursor);
         setError(null);
       } catch (err) {
@@ -65,6 +69,7 @@ export function HomeFeed() {
       // Append, not replace. If the server returns no posts we still advance
       // the cursor to null so the button disappears.
       setPosts((curr) => (curr ? [...curr, ...res.posts] : res.posts));
+      setLikeSummaries((curr) => ({ ...curr, ...res.likeSummaries }));
       setCursor(res.nextCursor);
     } catch (err) {
       setError(
@@ -139,6 +144,7 @@ export function HomeFeed() {
                   limited
                 </span>
               ) : null}
+              <LikeCount summary={likeSummaries[post.id]} />
             </footer>
           </li>
         ))}
@@ -168,5 +174,25 @@ export function HomeFeed() {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Compact "♥ N" pill for the row footer. Renders nothing when totalLikes is
+ * zero — that's the most common case and a "0 likes" label on every row
+ * adds noise without information. Same shape and behavior as the count in
+ * <MyPosts> and <PersonaPosts>; duplicated here to keep each list
+ * component self-contained.
+ */
+function LikeCount({ summary }: { summary: LikeSummary | undefined }) {
+  if (!summary || summary.totalLikes === 0) return null;
+  return (
+    <span
+      aria-label={`${summary.totalLikes} ${summary.totalLikes === 1 ? 'like' : 'likes'}`}
+      className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-default))]"
+    >
+      <span aria-hidden="true">♥</span>
+      <span>{summary.totalLikes}</span>
+    </span>
   );
 }

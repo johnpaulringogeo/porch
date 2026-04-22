@@ -77,8 +77,22 @@ export interface EditPostResponse {
 
 export interface ListMyPostsResponse {
   posts: Post[];
+  /**
+   * Like state per post in this page, keyed by post id. Every id in `posts`
+   * has an entry; posts with no likes appear as `{ liked: false, totalLikes: 0 }`
+   * rather than being omitted, so callers can lookup-and-render without a
+   * coalesce.
+   */
+  likeSummaries: Record<string, LikeSummary>;
   /** Opaque base64 cursor for the next page. Null if at end. */
   nextCursor: string | null;
 }
 
-export type HomeFeedResponse = FeedPage;
+/**
+ * Home-feed response. Same shape as ListMyPostsResponse with the same
+ * likeSummaries semantics — every post id in this page has an entry, with
+ * unliked posts present as `{ liked: false, totalLikes: 0 }`.
+ */
+export interface HomeFeedResponse extends FeedPage {
+  likeSummaries: Record<string, LikeSummary>;
+}

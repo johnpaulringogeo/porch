@@ -32,8 +32,19 @@ feedRoutes.get('/home', async (c) => {
     cursor: decodedCursor ?? undefined,
   });
 
+  // One batched lookup over the page's post IDs. Summaries live next to the
+  // post list rather than embedded in `items` because the feed query is a
+  // joined select that we don't want to widen further; this keeps the SQL
+  // for visibility separate from the SQL for engagement.
+  const summariesMap = await PostOps.getLikeSummariesForPosts(
+    c.var.db,
+    { personaId: actor.personaId },
+    result.items.map((item) => item.post.id),
+  );
+
   const payload: HomeFeedResponse = {
     posts: result.items.map((item) => PostOps.toApiPost(item.post, item.author)),
+    likeSummaries: Object.fromEntries(summariesMap),
     nextCursor: result.nextCursor,
   };
   return c.json(payload);

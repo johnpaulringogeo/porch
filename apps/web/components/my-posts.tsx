@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { ListMyPostsResponse } from '@porch/types/api';
+import type { LikeSummary, ListMyPostsResponse } from '@porch/types/api';
 import type { Post } from '@porch/types/domain';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -27,6 +27,9 @@ interface MyPostsProps {
 export function MyPosts({ refreshKey }: MyPostsProps) {
   const { accessToken } = useAuth();
   const [posts, setPosts] = useState<Post[] | null>(null);
+  const [likeSummaries, setLikeSummaries] = useState<
+    Record<string, LikeSummary>
+  >({});
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +43,7 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
           signal,
         });
         setPosts(res.posts);
+        setLikeSummaries(res.likeSummaries);
         setCursor(res.nextCursor);
         setError(null);
       } catch (err) {
@@ -70,6 +74,10 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
         accessToken,
       });
       setPosts((curr) => (curr ? [...curr, ...res.posts] : res.posts));
+      // Merge new like summaries onto the existing map so earlier-page
+      // counts stay around. Page boundaries are by created-at, not id, so
+      // there's no overlap for keys to collide on.
+      setLikeSummaries((curr) => ({ ...curr, ...res.likeSummaries }));
       setCursor(res.nextCursor);
     } catch (err) {
       setError(
@@ -150,6 +158,7 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
                       {post.moderationState.replace('_', ' ')}
                     </span>
                   ) : null}
+                  <LikeCount summary={likeSummaries[post.id]} />
                 </p>
               </div>
               <button
@@ -189,5 +198,27 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Compact "♥ N" pill used in row footers. Renders nothing when the post
+ * has zero likes — that's the most common case (especially in v0) and we
+ * don't want a "0 likes" label on every row. The filled heart visually
+ * hints "people engaged here" without needing a separate icon library.
+ *
+ * Defensive: a missing summary (shouldn't happen — the API guarantees an
+ * entry for every post id) is treated the same as zero likes.
+ */
+function LikeCount({ summary }: { summary: LikeSummary | undefined }) {
+  if (!summary || summary.totalLikes === 0) return null;
+  return (
+    <span
+      aria-label={`${summary.totalLikes} ${summary.totalLikes === 1 ? 'like' : 'likes'}`}
+      className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-default))]"
+    >
+      <span aria-hidden="true">♥</span>
+      <span>{summary.totalLikes}</span>
+    </span>
   );
 }

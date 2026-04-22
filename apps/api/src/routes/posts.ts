@@ -46,6 +46,7 @@ postRoutes.get('/mine', async (c) => {
   );
   const payload: ListMyPostsResponse = {
     posts: result.posts,
+    likeSummaries: result.likeSummaries,
     nextCursor: result.nextCursor,
   };
   return c.json(payload);

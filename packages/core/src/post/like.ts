@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Database } from '@porch/db';
 import { postLike } from '@porch/db';
 import { ErrorCode, PorchError } from '@porch/types';
@@ -104,4 +104,72 @@ export async function togglePostLike(
   }
 
   return getLikeSummary(db, actor, postId);
+}
+
+/**
+ * Batch variant of getLikeSummary for list views.
+ *
+ * Two queries against post_like, both restricted to the input postId set:
+ *   1) GROUP BY post_id, COUNT(*) — totals per post
+ *   2) WHERE persona_id = me — which of these posts the viewer has liked
+ *
+ * Result is keyed by postId. Posts with no rows in either query default to
+ * `{ liked: false, totalLikes: 0 }` so the caller never has to handle a
+ * missing entry.
+ *
+ * Empty input is a no-op (avoids issuing `WHERE post_id IN ()` which some
+ * drivers reject) and returns an empty Map.
+ *
+ * No visibility check here. Callers (list ops) have already enforced read
+ * permission on the parent post set, so the result rows can't leak likes
+ * for posts the viewer can't see.
+ */
+export async function getLikeSummariesForPosts(
+  db: Database,
+  actor: PostActor,
+  postIds: string[],
+): Promise<Map<string, LikeSummary>> {
+  const summaries = new Map<string, LikeSummary>();
+  if (postIds.length === 0) return summaries;
+
+  // Seed every requested postId with the empty default — keeps callers from
+  // having to coalesce on each lookup.
+  for (const id of postIds) {
+    summaries.set(id, { liked: false, totalLikes: 0 });
+  }
+
+  const counts = await db
+    .select({
+      postId: postLike.postId,
+      total: sql<number>`count(*)::int`,
+    })
+    .from(postLike)
+    .where(inArray(postLike.postId, postIds))
+    .groupBy(postLike.postId);
+
+  for (const row of counts) {
+    const current = summaries.get(row.postId);
+    if (current) {
+      current.totalLikes = row.total;
+    }
+  }
+
+  const mine = await db
+    .select({ postId: postLike.postId })
+    .from(postLike)
+    .where(
+      and(
+        inArray(postLike.postId, postIds),
+        eq(postLike.personaId, actor.personaId),
+      ),
+    );
+
+  for (const row of mine) {
+    const current = summaries.get(row.postId);
+    if (current) {
+      current.liked = true;
+    }
+  }
+
+  return summaries;
 }

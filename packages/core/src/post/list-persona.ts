@@ -2,8 +2,10 @@ import { and, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Database } from '@porch/db';
 import { contact, persona, post, postAudience } from '@porch/db';
 import type { Post } from '@porch/types/domain';
+import type { LikeSummary } from '@porch/types/api';
 import { PostAudienceMode, PostModerationState } from '@porch/types/domain';
 import { toApiPost } from './helpers.js';
+import { getLikeSummariesForPosts } from './like.js';
 import { toPublicPersona } from '../contact/helpers.js';
 import { decodeCursor, encodeCursor } from '../feed/index.js';
 
@@ -15,6 +17,12 @@ export interface ListPersonaPostsParams {
 
 export interface ListPersonaPostsResult {
   posts: Post[];
+  /**
+   * Like state per post in this page, keyed by post id. Same shape as
+   * ListMyPostsResult — every id in `posts` is present, with unliked posts
+   * appearing as `{ liked: false, totalLikes: 0 }`.
+   */
+  likeSummaries: Record<string, LikeSummary>;
   nextCursor: string | null;
 }
 
@@ -106,7 +114,7 @@ export async function listPersonaPosts(
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   if (page.length === 0) {
-    return { posts: [], nextCursor: null };
+    return { posts: [], likeSummaries: {}, nextCursor: null };
   }
 
   const [authorRow] = await db
@@ -117,7 +125,7 @@ export async function listPersonaPosts(
   if (!authorRow) {
     // Author vanished between the profile lookup and this call — treat as
     // an empty result rather than 500'ing the page.
-    return { posts: [], nextCursor: null };
+    return { posts: [], likeSummaries: {}, nextCursor: null };
   }
   const author = toPublicPersona(authorRow);
 
@@ -126,8 +134,16 @@ export async function listPersonaPosts(
     ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id })
     : null;
 
+  const summariesMap = await getLikeSummariesForPosts(
+    db,
+    viewer,
+    page.map((row) => row.id),
+  );
+  const likeSummaries = Object.fromEntries(summariesMap);
+
   return {
     posts: page.map((row) => toApiPost(row, author)),
+    likeSummaries,
     nextCursor,
   };
 }
