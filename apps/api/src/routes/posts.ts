@@ -9,6 +9,7 @@ import {
   type CreatePostResponse,
   type EditPostResponse,
   type GetPostResponse,
+  type LikePostResponse,
   type ListMyPostsResponse,
 } from '@porch/types/api';
 import { requireAuth } from '../middleware/auth.js';
@@ -60,6 +61,7 @@ postRoutes.get('/:id', async (c) => {
   const payload: GetPostResponse = {
     post: result.post,
     audiencePersonas: result.audiencePersonas,
+    likeSummary: result.likeSummary,
   };
   return c.json(payload);
 });
@@ -145,6 +147,34 @@ postRoutes.delete('/:id', async (c) => {
   });
 
   return c.body(null, 204);
+});
+
+postRoutes.post('/:id/like', async (c) => {
+  const actor = requireActor(c);
+  const postId = c.req.param('id');
+
+  const summary = await PostOps.togglePostLike(
+    c.var.db,
+    { personaId: actor.personaId },
+    postId,
+  );
+
+  // Audit both directions of the toggle. Engagement is a low-volume signal
+  // for now and the audit log is the only durable trail of who liked what
+  // and when. Action name carries the resulting state.
+  const { ipAddress, userAgent } = clientInfo(c);
+  void AuditOps.recordAudit(c.var.db, {
+    accountId: actor.accountId,
+    personaId: actor.personaId,
+    action: summary.liked ? 'post.like' : 'post.unlike',
+    entityType: 'post',
+    entityId: postId,
+    ipAddress,
+    userAgent,
+  });
+
+  const payload: LikePostResponse = { likeSummary: summary };
+  return c.json(payload);
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────

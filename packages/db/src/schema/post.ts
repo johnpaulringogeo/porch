@@ -67,3 +67,30 @@ export const postAudience = pgTable(
 
 export type PostAudience = typeof postAudience.$inferSelect;
 export type NewPostAudience = typeof postAudience.$inferInsert;
+
+/**
+ * Like edge — at most one row per (post, persona). The composite PK doubles
+ * as the lookup index for "count likes for post X" and "is persona P a liker
+ * of X" queries (PK leading column covers count, full PK covers existence).
+ *
+ * No personaId-only index yet: there's no "list my likes" surface in v0.
+ * Add one when that view ships.
+ */
+export const postLike = pgTable(
+  'post_like',
+  {
+    postId: uuid('post_id')
+      .notNull()
+      .references(() => post.id, { onDelete: 'cascade' }),
+    personaId: uuid('persona_id')
+      .notNull()
+      .references(() => persona.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.postId, table.personaId] }),
+  }),
+);
+
+export type PostLike = typeof postLike.$inferSelect;
+export type NewPostLike = typeof postLike.$inferInsert;

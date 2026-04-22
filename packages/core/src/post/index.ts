@@ -31,4 +31,5 @@ export type {
   ListPersonaPostsParams,
   ListPersonaPostsResult,
 } from './list-persona.js';
-export { toApiPost } from './helpers.js';
+export { togglePostLike, getLikeSummary } from './like.js';
+export { toApiPost, assertCanViewPost } from './helpers.js';

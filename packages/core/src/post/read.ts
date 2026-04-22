@@ -1,14 +1,14 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { Database } from '@porch/db';
-import { contact, persona, post, postAudience } from '@porch/db';
-import { ErrorCode, PorchError } from '@porch/types';
+import { persona, postAudience } from '@porch/db';
 import {
   PostAudienceMode,
-  PostModerationState,
   type Post,
   type PublicPersona,
 } from '@porch/types/domain';
-import { toApiPost } from './helpers.js';
+import type { LikeSummary } from '@porch/types/api';
+import { assertCanViewPost, toApiPost } from './helpers.js';
+import { getLikeSummary } from './like.js';
 import { toPublicPersona } from '../contact/helpers.js';
 import type { PostActor } from './create.js';
 
@@ -20,12 +20,8 @@ import type { PostActor } from './create.js';
  * Author-only:
  *   - Authors can always read their own posts (including moderated / pending
  *     ones) and see the full audience for selected-mode posts.
- *   - For every other viewer the post must be:
- *       * not soft-deleted,
- *       * in a non-terminal moderation state (`ok` or `limited`),
- *       * visible under the audience rules:
- *           all_contacts → author must have the viewer as a contact,
- *           selected     → viewer must be in `post_audience`.
+ *   - For every other viewer the post must be visible per `assertCanViewPost`
+ *     (not deleted, moderation `ok`/`limited`, audience rules satisfied).
  *     Non-authors never see the audience list — they're a permitted
  *     viewer, that's the only fact they're entitled to know.
  *
@@ -35,37 +31,21 @@ import type { PostActor } from './create.js';
  * gets a stable, alphabetical ordering — `post_audience` doesn't carry an
  * insertion timestamp.
  *
- * We return 404 on every visibility failure — "not found" and "not allowed
- * to see" look identical to the caller, since leaking existence is itself
- * a signal.
+ * `likeSummary` is computed for everyone — the count is public to anyone
+ * who can see the post, and `liked` reflects the *viewer's* state.
  */
 export async function getPost(
   db: Database,
   actor: PostActor,
   postId: string,
-): Promise<{ post: Post; audiencePersonas: PublicPersona[] | null }> {
-  const [row] = await db.select().from(post).where(eq(post.id, postId)).limit(1);
-  if (!row) {
-    throw new PorchError(ErrorCode.NotFound, 'Post not found.');
-  }
+): Promise<{
+  post: Post;
+  audiencePersonas: PublicPersona[] | null;
+  likeSummary: LikeSummary;
+}> {
+  const row = await assertCanViewPost(db, actor, postId);
 
   const isAuthor = row.authorPersonaId === actor.personaId;
-
-  if (!isAuthor) {
-    if (row.deletedAt) {
-      throw new PorchError(ErrorCode.NotFound, 'Post not found.');
-    }
-    const moderationOk =
-      row.moderationState === PostModerationState.Ok ||
-      row.moderationState === PostModerationState.Limited;
-    if (!moderationOk) {
-      throw new PorchError(ErrorCode.NotFound, 'Post not found.');
-    }
-    const visible = await isVisibleToViewer(db, row, actor.personaId);
-    if (!visible) {
-      throw new PorchError(ErrorCode.NotFound, 'Post not found.');
-    }
-  }
 
   const [authorRow] = await db
     .select()
@@ -79,43 +59,13 @@ export async function getPost(
       ? await loadSelectedAudience(db, row.id)
       : null;
 
+  const likeSummary = await getLikeSummary(db, actor, row.id);
+
   return {
     post: toApiPost(row, toPublicPersona(authorRow)),
     audiencePersonas,
+    likeSummary,
   };
-}
-
-async function isVisibleToViewer(
-  db: Database,
-  row: { id: string; authorPersonaId: string; audienceMode: string },
-  viewerPersonaId: string,
-): Promise<boolean> {
-  if (row.audienceMode === PostAudienceMode.AllContacts) {
-    const [match] = await db
-      .select({ id: contact.ownerPersonaId })
-      .from(contact)
-      .where(
-        and(
-          eq(contact.ownerPersonaId, row.authorPersonaId),
-          eq(contact.contactPersonaId, viewerPersonaId),
-        ),
-      )
-      .limit(1);
-    return !!match;
-  }
-
-  if (row.audienceMode === PostAudienceMode.Selected) {
-    const [match] = await db
-      .select({ id: postAudience.postId })
-      .from(postAudience)
-      .where(
-        and(eq(postAudience.postId, row.id), eq(postAudience.audiencePersonaId, viewerPersonaId)),
-      )
-      .limit(1);
-    return !!match;
-  }
-
-  return false;
 }
 
 async function loadSelectedAudience(

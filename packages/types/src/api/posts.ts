@@ -47,6 +47,28 @@ export interface GetPostResponse {
    * post, with any subsequently-removed contacts simply absent.
    */
   audiencePersonas: PublicPersona[] | null;
+  likeSummary: LikeSummary;
+}
+
+/**
+ * Like state for a (post, viewer) pair. Returned alongside the post on
+ * GET /api/posts/:id and as the body of POST /api/posts/:id/like so the
+ * UI can stay coherent without a follow-up read.
+ *
+ *   liked       — does the *viewer* currently have a like on this post?
+ *   totalLikes  — total likers including (when liked=true) the viewer.
+ *
+ * Authors get a summary too: `liked` is always false on your own post in v0
+ * because you can't like your own posts (the API rejects it), and the count
+ * is the same view everyone else gets.
+ */
+export interface LikeSummary {
+  liked: boolean;
+  totalLikes: number;
+}
+
+export interface LikePostResponse {
+  likeSummary: LikeSummary;
 }
 
 export interface EditPostResponse {

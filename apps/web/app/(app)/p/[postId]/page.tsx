@@ -39,7 +39,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { EditPostResponse, GetPostResponse } from '@porch/types/api';
+import type {
+  EditPostResponse,
+  GetPostResponse,
+  LikePostResponse,
+  LikeSummary,
+} from '@porch/types/api';
 import type { Post, PublicPersona } from '@porch/types/domain';
 import { ErrorCode } from '@porch/types';
 import { api, ApiError } from '@/lib/api';
@@ -51,7 +56,12 @@ const POST_CONTENT_MAX = 4000;
 
 type LoadState =
   | { kind: 'loading' }
-  | { kind: 'ready'; post: Post; audiencePersonas: PublicPersona[] | null }
+  | {
+      kind: 'ready';
+      post: Post;
+      audiencePersonas: PublicPersona[] | null;
+      likeSummary: LikeSummary;
+    }
   | { kind: 'not-found' }
   | { kind: 'forbidden'; message: string }
   | { kind: 'error'; message: string };
@@ -78,6 +88,7 @@ export default function PostDetailPage() {
           kind: 'ready',
           post: res.post,
           audiencePersonas: res.audiencePersonas,
+          likeSummary: res.likeSummary,
         });
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -115,11 +126,24 @@ export default function PostDetailPage() {
 
   const onEdited = useCallback((post: Post) => {
     // Audience can't change via PATCH (the route is content-only), so reuse
-    // whatever we already loaded rather than re-fetching the full GET.
+    // whatever we already loaded rather than re-fetching the full GET. Same
+    // for likeSummary — likes are independent of edits and the LikeButton
+    // owns its own post-mount state, so the seed value here only matters
+    // until the next click.
     setState((prev) =>
       prev.kind === 'ready'
-        ? { kind: 'ready', post, audiencePersonas: prev.audiencePersonas }
-        : { kind: 'ready', post, audiencePersonas: null },
+        ? {
+            kind: 'ready',
+            post,
+            audiencePersonas: prev.audiencePersonas,
+            likeSummary: prev.likeSummary,
+          }
+        : {
+            kind: 'ready',
+            post,
+            audiencePersonas: null,
+            likeSummary: { liked: false, totalLikes: 0 },
+          },
     );
   }, []);
 
@@ -188,6 +212,7 @@ function renderBody(
         <PostCard
           post={state.post}
           audiencePersonas={state.audiencePersonas}
+          likeSummary={state.likeSummary}
           isAuthor={state.post.author.id === viewerPersonaId}
           accessToken={accessToken}
           onEdited={onEdited}
@@ -209,6 +234,12 @@ interface PostCardProps {
    * contact.
    */
   audiencePersonas: PublicPersona[] | null;
+  /**
+   * Initial like state for this (post, viewer) pair. The LikeButton owns
+   * subsequent state — it's seeded once at mount and never re-synced from
+   * this prop, so a parent re-render won't clobber an in-flight toggle.
+   */
+  likeSummary: LikeSummary;
   isAuthor: boolean;
   accessToken: string | null;
   onEdited: (post: Post) => void;
@@ -218,6 +249,7 @@ interface PostCardProps {
 function PostCard({
   post,
   audiencePersonas,
+  likeSummary,
   isAuthor,
   accessToken,
   onEdited,
@@ -363,6 +395,13 @@ function PostCard({
 
       {audiencePersonas ? <AudienceList personas={audiencePersonas} /> : null}
 
+      <LikeBar
+        postId={post.id}
+        initial={likeSummary}
+        isAuthor={isAuthor}
+        accessToken={accessToken}
+      />
+
       {post.moderationReason ? (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           {post.moderationReason}
@@ -477,6 +516,100 @@ function AudienceList({ personas }: { personas: PublicPersona[] }) {
         </span>
       ))}
     </p>
+  );
+}
+
+/**
+ * Like button + count for a post, with optimistic toggle.
+ *
+ * Owns its own state independent of the parent — `initial` is the seed value
+ * from the page load, and after that the server response is the authority.
+ * Optimistic flow:
+ *   1) flip `liked` and adjust `totalLikes` ±1 immediately
+ *   2) POST /api/posts/:id/like
+ *   3) on success: replace state with the server's summary
+ *   4) on failure: revert the optimistic change and surface an inline error
+ *
+ * Authors don't get a button (you can't like your own post — the API rejects
+ * it). They still see the count, since "people liked this" is the whole
+ * reason the bar exists for them.
+ *
+ * The button is disabled while a request is in flight to keep the
+ * server-state and the displayed-state in lockstep — back-to-back clicks
+ * during a slow network would race each other and the second response would
+ * silently overwrite the first.
+ */
+interface LikeBarProps {
+  postId: string;
+  initial: LikeSummary;
+  isAuthor: boolean;
+  accessToken: string | null;
+}
+
+function LikeBar({ postId, initial, isAuthor, accessToken }: LikeBarProps) {
+  const [summary, setSummary] = useState<LikeSummary>(initial);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggle = useCallback(async () => {
+    if (pending) return;
+    const previous = summary;
+    const optimistic: LikeSummary = {
+      liked: !previous.liked,
+      totalLikes: previous.totalLikes + (previous.liked ? -1 : 1),
+    };
+    setSummary(optimistic);
+    setPending(true);
+    setError(null);
+    try {
+      const res = await api<LikePostResponse>({
+        method: 'POST',
+        path: `/api/posts/${encodeURIComponent(postId)}/like`,
+        accessToken,
+      });
+      setSummary(res.likeSummary);
+    } catch (err) {
+      setSummary(previous);
+      setError(
+        err instanceof ApiError ? err.message : 'Could not update your like.',
+      );
+    } finally {
+      setPending(false);
+    }
+  }, [accessToken, pending, postId, summary]);
+
+  const countLabel = `${summary.totalLikes} ${summary.totalLikes === 1 ? 'like' : 'likes'}`;
+
+  if (isAuthor) {
+    return (
+      <p className="text-xs text-[hsl(var(--text-muted))]">{countLabel}</p>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-xs">
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        disabled={pending}
+        aria-pressed={summary.liked}
+        aria-label={summary.liked ? 'Unlike this post' : 'Like this post'}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+          summary.liked
+            ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+            : 'border-[hsl(var(--border-default))] bg-white text-[hsl(var(--text-default))] hover:bg-[hsl(var(--surface-muted))]'
+        }`}
+      >
+        <span aria-hidden="true">{summary.liked ? '♥' : '♡'}</span>
+        <span>{summary.liked ? 'Liked' : 'Like'}</span>
+      </button>
+      <span className="text-[hsl(var(--text-muted))]">{countLabel}</span>
+      {error ? (
+        <span role="alert" className="basis-full text-red-600">
+          {error}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
