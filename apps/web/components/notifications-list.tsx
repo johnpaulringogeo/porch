@@ -392,6 +392,27 @@ function NotificationBody({ notification: n }: { notification: ApiNotification }
         </p>
       );
     }
+    case NotificationType.PostLiked: {
+      // Recipient is the post's author. The destination link goes to the
+      // author's own post — visibility check passes trivially since you
+      // always see your own posts (even if soft-deleted/limited, you'd land
+      // on the post page and see the moderation banner, not a 404).
+      const postId =
+        typeof n.payload?.postId === 'string' ? n.payload.postId : null;
+      return (
+        <p>
+          {actorEl} liked your post.{' '}
+          {postId ? (
+            <Link
+              href={`/p/${postId}`}
+              className="text-mode-home underline-offset-2 hover:underline"
+            >
+              View
+            </Link>
+          ) : null}
+        </p>
+      );
+    }
     case NotificationType.PostModerated:
       return (
         <p>

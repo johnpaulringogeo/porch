@@ -6,6 +6,7 @@ export const notificationType = pgEnum('notification_type', [
   'contact_request_accepted',
   'contact_request_declined',
   'post_selected_audience',
+  'post_liked',
   'post_moderated',
   'account_moderated',
   'system',

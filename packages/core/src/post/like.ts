@@ -3,8 +3,10 @@ import type { Database } from '@porch/db';
 import { postLike } from '@porch/db';
 import { ErrorCode, PorchError } from '@porch/types';
 import type { LikeSummary } from '@porch/types/api';
+import { NotificationType } from '@porch/types/domain';
 import { assertCanViewPost } from './helpers.js';
 import type { PostActor } from './create.js';
+import { createNotification } from '../notification/index.js';
 
 /**
  * Like operations live next to the post module — they share the visibility
@@ -101,6 +103,29 @@ export async function togglePostLike(
       .insert(postLike)
       .values({ postId, personaId: actor.personaId })
       .onConflictDoNothing();
+
+    // Notify the post's author that someone liked their post. Fires only on
+    // the like edge (not unlike) — a quick double-tap that toggles back to
+    // off shouldn't leave a notification trail.
+    //
+    // Defensive guard against self-likes even though the BadRequest above
+    // makes this unreachable: if that check ever moves or is bypassed in a
+    // future caller, we still don't want to ping someone for liking their
+    // own post.
+    //
+    // Fire-and-forget: a stuck notification write must not roll back the
+    // like itself. Mirrors the contact/post-create handlers.
+    if (row.authorPersonaId !== actor.personaId) {
+      try {
+        await createNotification(db, {
+          recipientPersonaId: row.authorPersonaId,
+          type: NotificationType.PostLiked,
+          payload: { postId, byPersonaId: actor.personaId },
+        });
+      } catch (err) {
+        console.error('post-liked-notify-failed', err);
+      }
+    }
   }
 
   return getLikeSummary(db, actor, postId);
