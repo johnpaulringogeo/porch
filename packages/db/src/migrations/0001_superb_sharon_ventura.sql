@@ -1,0 +1,1 @@
+ALTER TYPE "notification_type" ADD VALUE 'post_selected_audience';

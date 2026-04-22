@@ -221,8 +221,8 @@ export function NotificationsList() {
   if (!notifications || notifications.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-[hsl(var(--border-default))] bg-[hsl(var(--surface-muted))] p-6 text-sm text-[hsl(var(--text-muted))]">
-        No notifications yet. When someone sends you a contact request or
-        accepts one of yours, it&apos;ll show up here.
+        No notifications yet. Contact requests, accepted contacts, and posts
+        someone shares directly with you will show up here.
       </div>
     );
   }
@@ -370,6 +370,28 @@ function NotificationBody({ notification: n }: { notification: ApiNotification }
       // No destination — just surface the fact; the contact bundle UI already
       // reflects the state. Kept terse intentionally.
       return <p>{actorEl} declined your contact request.</p>;
+    case NotificationType.PostSelectedAudience: {
+      // Deep-link to the post. The visibility check on the post page will let
+      // the recipient through — they're in the audience by construction. If
+      // the author has since deleted the post or removed them, the page
+      // itself surfaces a 404 / not-permitted state; we keep this row honest
+      // by still linking and letting the destination explain.
+      const postId =
+        typeof n.payload?.postId === 'string' ? n.payload.postId : null;
+      return (
+        <p>
+          {actorEl} shared a post with you.{' '}
+          {postId ? (
+            <Link
+              href={`/p/${postId}`}
+              className="text-mode-home underline-offset-2 hover:underline"
+            >
+              View
+            </Link>
+          ) : null}
+        </p>
+      );
+    }
     case NotificationType.PostModerated:
       return (
         <p>

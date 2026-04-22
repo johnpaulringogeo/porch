@@ -3,12 +3,14 @@ import type { Database } from '@porch/db';
 import { contact, persona, post, postAudience } from '@porch/db';
 import { ErrorCode, PorchError } from '@porch/types';
 import {
+  NotificationType,
   PostAudienceMode,
   PostMode,
   type Post,
 } from '@porch/types/domain';
 import { toApiPost } from './helpers.js';
 import { toPublicPersona } from '../contact/helpers.js';
+import { createNotification } from '../notification/index.js';
 
 export interface PostActor {
   personaId: string;
@@ -112,6 +114,31 @@ export async function createPost(
     .where(eq(persona.id, actor.personaId))
     .limit(1);
   if (!authorRow) throw new Error('Author persona vanished mid-post');
+
+  // Fan out one notification per audience persona for selected-mode posts.
+  // Outside the tx so a stuck notification can't roll back the post — same
+  // fire-and-forget posture as the contact handlers. all_contacts posts skip
+  // this: those land in the home feed and don't warrant a per-recipient ping.
+  if (input.audienceMode === PostAudienceMode.Selected && audienceIds.length > 0) {
+    await Promise.all(
+      audienceIds.map(async (recipientId) => {
+        // Defensive: never notify the author about their own post. The
+        // contact-validation above already prevents this in practice (you're
+        // not in your own contact list), but a check here keeps the invariant
+        // local to the fan-out.
+        if (recipientId === actor.personaId) return;
+        try {
+          await createNotification(db, {
+            recipientPersonaId: recipientId,
+            type: NotificationType.PostSelectedAudience,
+            payload: { postId: inserted.id, byPersonaId: actor.personaId },
+          });
+        } catch (err) {
+          console.error('post-selected-audience-notify-failed', err);
+        }
+      }),
+    );
+  }
 
   return toApiPost(inserted, toPublicPersona(authorRow));
 }
