@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { FeedOps, PostOps } from '@porch/core';
+import { CommentOps, FeedOps, PostOps } from '@porch/core';
 import { ErrorCode, PorchError } from '@porch/types';
 import { FeedQuery, type HomeFeedResponse } from '@porch/types/api';
 import { requireAuth } from '../middleware/auth.js';
@@ -32,19 +32,25 @@ feedRoutes.get('/home', async (c) => {
     cursor: decodedCursor ?? undefined,
   });
 
-  // One batched lookup over the page's post IDs. Summaries live next to the
-  // post list rather than embedded in `items` because the feed query is a
-  // joined select that we don't want to widen further; this keeps the SQL
-  // for visibility separate from the SQL for engagement.
-  const summariesMap = await PostOps.getLikeSummariesForPosts(
-    c.var.db,
-    { personaId: actor.personaId },
-    result.items.map((item) => item.post.id),
-  );
+  // Batched engagement lookups over the page's post IDs. Summaries live next
+  // to the post list rather than embedded in `items` because the feed query
+  // is a joined select we don't want to widen further; this keeps the SQL
+  // for visibility separate from the SQL for engagement. Runs in parallel
+  // with the comment-count batch — independent queries over the same ids.
+  const postIds = result.items.map((item) => item.post.id);
+  const [likeSummariesMap, commentSummariesMap] = await Promise.all([
+    PostOps.getLikeSummariesForPosts(
+      c.var.db,
+      { personaId: actor.personaId },
+      postIds,
+    ),
+    CommentOps.getCommentSummariesForPosts(c.var.db, postIds),
+  ]);
 
   const payload: HomeFeedResponse = {
     posts: result.items.map((item) => PostOps.toApiPost(item.post, item.author)),
-    likeSummaries: Object.fromEntries(summariesMap),
+    likeSummaries: Object.fromEntries(likeSummariesMap),
+    commentSummaries: Object.fromEntries(commentSummariesMap),
     nextCursor: result.nextCursor,
   };
   return c.json(payload);

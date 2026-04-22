@@ -10,15 +10,25 @@
  * successful compose. That reset clears the cursor and replaces the list,
  * which is what we want: a brand-new post belongs at the top of page 1, not
  * appended to whatever later page the user happens to be on.
+ *
+ * Like affordance: always read-only <LikeCount>. These are the viewer's own
+ * posts and the API rejects self-likes — an interactive button that can
+ * only error is worse than no button.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { LikeSummary, ListMyPostsResponse } from '@porch/types/api';
+import type {
+  CommentSummary,
+  LikeSummary,
+  ListMyPostsResponse,
+} from '@porch/types/api';
 import type { Post } from '@porch/types/domain';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { formatTimestamp } from '@/lib/format-time';
+import { LikeCount } from '@/components/like-pill';
+import { CommentCount } from '@/components/comment-pill';
 
 interface MyPostsProps {
   refreshKey: number;
@@ -29,6 +39,9 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [likeSummaries, setLikeSummaries] = useState<
     Record<string, LikeSummary>
+  >({});
+  const [commentSummaries, setCommentSummaries] = useState<
+    Record<string, CommentSummary>
   >({});
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -44,6 +57,7 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
         });
         setPosts(res.posts);
         setLikeSummaries(res.likeSummaries);
+        setCommentSummaries(res.commentSummaries);
         setCursor(res.nextCursor);
         setError(null);
       } catch (err) {
@@ -74,10 +88,11 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
         accessToken,
       });
       setPosts((curr) => (curr ? [...curr, ...res.posts] : res.posts));
-      // Merge new like summaries onto the existing map so earlier-page
-      // counts stay around. Page boundaries are by created-at, not id, so
-      // there's no overlap for keys to collide on.
+      // Merge new summaries onto the existing maps so earlier-page counts
+      // stay around. Page boundaries are by created-at, not id, so there's
+      // no overlap for keys to collide on.
       setLikeSummaries((curr) => ({ ...curr, ...res.likeSummaries }));
+      setCommentSummaries((curr) => ({ ...curr, ...res.commentSummaries }));
       setCursor(res.nextCursor);
     } catch (err) {
       setError(
@@ -159,6 +174,10 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
                     </span>
                   ) : null}
                   <LikeCount summary={likeSummaries[post.id]} />
+                  <CommentCount
+                    postId={post.id}
+                    summary={commentSummaries[post.id]}
+                  />
                 </p>
               </div>
               <button
@@ -198,27 +217,5 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
         </p>
       ) : null}
     </div>
-  );
-}
-
-/**
- * Compact "♥ N" pill used in row footers. Renders nothing when the post
- * has zero likes — that's the most common case (especially in v0) and we
- * don't want a "0 likes" label on every row. The filled heart visually
- * hints "people engaged here" without needing a separate icon library.
- *
- * Defensive: a missing summary (shouldn't happen — the API guarantees an
- * entry for every post id) is treated the same as zero likes.
- */
-function LikeCount({ summary }: { summary: LikeSummary | undefined }) {
-  if (!summary || summary.totalLikes === 0) return null;
-  return (
-    <span
-      aria-label={`${summary.totalLikes} ${summary.totalLikes === 1 ? 'like' : 'likes'}`}
-      className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-default))]"
-    >
-      <span aria-hidden="true">♥</span>
-      <span>{summary.totalLikes}</span>
-    </span>
   );
 }

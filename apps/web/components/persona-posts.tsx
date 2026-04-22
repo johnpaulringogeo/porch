@@ -14,19 +14,31 @@
  * self-viewer we hint at composing; for others we say "nothing visible yet"
  * since there's no way to tell whether the profile has no posts at all or
  * just none the viewer is permitted to see.
+ *
+ * Like affordance: when the viewer is the profile owner (isSelf) we render
+ * a read-only <LikeCount> — the API rejects self-likes and an interactive
+ * button that can only error is worse than no button. For any other viewer
+ * we render <InlineLikeButton> so likes on the profile list behave the same
+ * as on the home feed and the post detail page.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { LikeSummary, ListPersonaPostsResponse } from '@porch/types/api';
+import type {
+  CommentSummary,
+  LikeSummary,
+  ListPersonaPostsResponse,
+} from '@porch/types/api';
 import type { Post } from '@porch/types/domain';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { formatTimestamp } from '@/lib/format-time';
+import { InlineLikeButton, LikeCount } from '@/components/like-pill';
+import { CommentCount } from '@/components/comment-pill';
 
 interface PersonaPostsProps {
   username: string;
-  /** True when the viewer is the profile owner — changes empty copy. */
+  /** True when the viewer is the profile owner — changes empty copy and like affordance. */
   isSelf: boolean;
 }
 
@@ -35,6 +47,9 @@ export function PersonaPosts({ username, isSelf }: PersonaPostsProps) {
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [likeSummaries, setLikeSummaries] = useState<
     Record<string, LikeSummary>
+  >({});
+  const [commentSummaries, setCommentSummaries] = useState<
+    Record<string, CommentSummary>
   >({});
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -50,6 +65,7 @@ export function PersonaPosts({ username, isSelf }: PersonaPostsProps) {
         });
         setPosts(res.posts);
         setLikeSummaries(res.likeSummaries);
+        setCommentSummaries(res.commentSummaries);
         setCursor(res.nextCursor);
         setError(null);
       } catch (err) {
@@ -79,6 +95,7 @@ export function PersonaPosts({ username, isSelf }: PersonaPostsProps) {
       });
       setPosts((curr) => (curr ? [...curr, ...res.posts] : res.posts));
       setLikeSummaries((curr) => ({ ...curr, ...res.likeSummaries }));
+      setCommentSummaries((curr) => ({ ...curr, ...res.commentSummaries }));
       setCursor(res.nextCursor);
     } catch (err) {
       setError(
@@ -142,7 +159,21 @@ export function PersonaPosts({ username, isSelf }: PersonaPostsProps) {
                   limited
                 </span>
               ) : null}
-              <LikeCount summary={likeSummaries[post.id]} />
+              {isSelf ? (
+                <LikeCount summary={likeSummaries[post.id]} />
+              ) : (
+                <InlineLikeButton
+                  postId={post.id}
+                  initial={
+                    likeSummaries[post.id] ?? { liked: false, totalLikes: 0 }
+                  }
+                  accessToken={accessToken}
+                />
+              )}
+              <CommentCount
+                postId={post.id}
+                summary={commentSummaries[post.id]}
+              />
             </footer>
           </li>
         ))}
@@ -171,22 +202,5 @@ export function PersonaPosts({ username, isSelf }: PersonaPostsProps) {
         </p>
       ) : null}
     </div>
-  );
-}
-
-/**
- * Compact "♥ N" pill for the row footer. Renders nothing on zero likes —
- * see the matching helpers in <MyPosts> and <HomeFeed> for the rationale.
- */
-function LikeCount({ summary }: { summary: LikeSummary | undefined }) {
-  if (!summary || summary.totalLikes === 0) return null;
-  return (
-    <span
-      aria-label={`${summary.totalLikes} ${summary.totalLikes === 1 ? 'like' : 'likes'}`}
-      className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--surface-muted))] px-2 py-0.5 text-[10px] font-medium text-[hsl(var(--text-default))]"
-    >
-      <span aria-hidden="true">♥</span>
-      <span>{summary.totalLikes}</span>
-    </span>
   );
 }

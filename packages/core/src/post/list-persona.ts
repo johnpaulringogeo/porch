@@ -2,10 +2,11 @@ import { and, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Database } from '@porch/db';
 import { contact, persona, post, postAudience } from '@porch/db';
 import type { Post } from '@porch/types/domain';
-import type { LikeSummary } from '@porch/types/api';
+import type { CommentSummary, LikeSummary } from '@porch/types/api';
 import { PostAudienceMode, PostModerationState } from '@porch/types/domain';
 import { toApiPost } from './helpers.js';
 import { getLikeSummariesForPosts } from './like.js';
+import { getCommentSummariesForPosts } from '../comment/index.js';
 import { toPublicPersona } from '../contact/helpers.js';
 import { decodeCursor, encodeCursor } from '../feed/index.js';
 
@@ -23,6 +24,12 @@ export interface ListPersonaPostsResult {
    * appearing as `{ liked: false, totalLikes: 0 }`.
    */
   likeSummaries: Record<string, LikeSummary>;
+  /**
+   * Comment counts per post in this page, keyed by post id. Every id in
+   * `posts` has an entry; posts with no comments appear as
+   * `{ totalComments: 0 }`.
+   */
+  commentSummaries: Record<string, CommentSummary>;
   nextCursor: string | null;
 }
 
@@ -114,7 +121,12 @@ export async function listPersonaPosts(
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   if (page.length === 0) {
-    return { posts: [], likeSummaries: {}, nextCursor: null };
+    return {
+      posts: [],
+      likeSummaries: {},
+      commentSummaries: {},
+      nextCursor: null,
+    };
   }
 
   const [authorRow] = await db
@@ -125,7 +137,12 @@ export async function listPersonaPosts(
   if (!authorRow) {
     // Author vanished between the profile lookup and this call — treat as
     // an empty result rather than 500'ing the page.
-    return { posts: [], likeSummaries: {}, nextCursor: null };
+    return {
+      posts: [],
+      likeSummaries: {},
+      commentSummaries: {},
+      nextCursor: null,
+    };
   }
   const author = toPublicPersona(authorRow);
 
@@ -134,16 +151,18 @@ export async function listPersonaPosts(
     ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id })
     : null;
 
-  const summariesMap = await getLikeSummariesForPosts(
-    db,
-    viewer,
-    page.map((row) => row.id),
-  );
-  const likeSummaries = Object.fromEntries(summariesMap);
+  const postIds = page.map((row) => row.id);
+  const [likeMap, commentMap] = await Promise.all([
+    getLikeSummariesForPosts(db, viewer, postIds),
+    getCommentSummariesForPosts(db, postIds),
+  ]);
+  const likeSummaries = Object.fromEntries(likeMap);
+  const commentSummaries = Object.fromEntries(commentMap);
 
   return {
     posts: page.map((row) => toApiPost(row, author)),
     likeSummaries,
+    commentSummaries,
     nextCursor,
   };
 }

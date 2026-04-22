@@ -40,6 +40,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type {
+  CommentSummary,
   EditPostResponse,
   GetPostResponse,
   LikePostResponse,
@@ -51,6 +52,7 @@ import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { formatTimestamp } from '@/lib/format-time';
 import { UsernameLink } from '@/components/username-link';
+import { CommentsSection } from '@/components/comments-section';
 
 const POST_CONTENT_MAX = 4000;
 
@@ -61,6 +63,7 @@ type LoadState =
       post: Post;
       audiencePersonas: PublicPersona[] | null;
       likeSummary: LikeSummary;
+      commentSummary: CommentSummary;
     }
   | { kind: 'not-found' }
   | { kind: 'forbidden'; message: string }
@@ -89,6 +92,7 @@ export default function PostDetailPage() {
           post: res.post,
           audiencePersonas: res.audiencePersonas,
           likeSummary: res.likeSummary,
+          commentSummary: res.commentSummary,
         });
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -129,7 +133,8 @@ export default function PostDetailPage() {
     // whatever we already loaded rather than re-fetching the full GET. Same
     // for likeSummary — likes are independent of edits and the LikeButton
     // owns its own post-mount state, so the seed value here only matters
-    // until the next click.
+    // until the next click. commentSummary is likewise unaffected by edits
+    // (editing a post doesn't change the comment count) so preserve it.
     setState((prev) =>
       prev.kind === 'ready'
         ? {
@@ -137,13 +142,21 @@ export default function PostDetailPage() {
             post,
             audiencePersonas: prev.audiencePersonas,
             likeSummary: prev.likeSummary,
+            commentSummary: prev.commentSummary,
           }
         : {
             kind: 'ready',
             post,
             audiencePersonas: null,
             likeSummary: { liked: false, totalLikes: 0 },
+            commentSummary: { totalComments: 0 },
           },
+    );
+  }, []);
+
+  const onCommentSummaryChange = useCallback((next: CommentSummary) => {
+    setState((prev) =>
+      prev.kind === 'ready' ? { ...prev, commentSummary: next } : prev,
     );
   }, []);
 
@@ -160,7 +173,14 @@ export default function PostDetailPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader />
-      {renderBody(state, session.persona.id, accessToken, onEdited, onDeleted)}
+      {renderBody(
+        state,
+        session.persona.id,
+        accessToken,
+        onEdited,
+        onDeleted,
+        onCommentSummaryChange,
+      )}
     </div>
   );
 }
@@ -183,6 +203,7 @@ function renderBody(
   accessToken: string | null,
   onEdited: (post: Post) => void,
   onDeleted: () => void,
+  onCommentSummaryChange: (summary: CommentSummary) => void,
 ): React.ReactNode {
   switch (state.kind) {
     case 'loading':
@@ -209,15 +230,24 @@ function renderBody(
       );
     case 'ready':
       return (
-        <PostCard
-          post={state.post}
-          audiencePersonas={state.audiencePersonas}
-          likeSummary={state.likeSummary}
-          isAuthor={state.post.author.id === viewerPersonaId}
-          accessToken={accessToken}
-          onEdited={onEdited}
-          onDeleted={onDeleted}
-        />
+        <>
+          <PostCard
+            post={state.post}
+            audiencePersonas={state.audiencePersonas}
+            likeSummary={state.likeSummary}
+            isAuthor={state.post.author.id === viewerPersonaId}
+            accessToken={accessToken}
+            onEdited={onEdited}
+            onDeleted={onDeleted}
+          />
+          <CommentsSection
+            postId={state.post.id}
+            viewerPersonaId={viewerPersonaId}
+            initialSummary={state.commentSummary}
+            accessToken={accessToken}
+            onSummaryChange={onCommentSummaryChange}
+          />
+        </>
       );
   }
 }

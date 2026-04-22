@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { PostAudienceMode, PostMode, type FeedPage, type Post } from '../domain/post.js';
+import {
+  PostAudienceMode,
+  PostMode,
+  type Comment,
+  type FeedPage,
+  type Post,
+} from '../domain/post.js';
 import type { PublicPersona } from '../domain/persona.js';
 
 export const CreatePostRequest = z
@@ -48,6 +54,13 @@ export interface GetPostResponse {
    */
   audiencePersonas: PublicPersona[] | null;
   likeSummary: LikeSummary;
+  /**
+   * Comment summary for this (post, viewer) pair. Excludes soft-deleted
+   * comments. The detail page uses this as the seed value for the comments
+   * section's count — the list endpoint returns a fresh count on each fetch
+   * but we still want a number to render before the first list load.
+   */
+  commentSummary: CommentSummary;
 }
 
 /**
@@ -71,6 +84,21 @@ export interface LikePostResponse {
   likeSummary: LikeSummary;
 }
 
+/**
+ * Comment state for a post. Returned alongside posts on read/list endpoints
+ * and as the body of comment create/delete so the UI can keep a count badge
+ * coherent without a follow-up read.
+ *
+ *   totalComments — total non-deleted comments on the post.
+ *
+ * No viewer-specific flag on this one (yet). Unlike LikeSummary there's
+ * nothing per-viewer to surface — you can comment on anything you can read
+ * and every commenter is visible to every reader.
+ */
+export interface CommentSummary {
+  totalComments: number;
+}
+
 export interface EditPostResponse {
   post: Post;
 }
@@ -84,15 +112,88 @@ export interface ListMyPostsResponse {
    * coalesce.
    */
   likeSummaries: Record<string, LikeSummary>;
+  /**
+   * Comment counts per post in this page, keyed by post id. Every id in
+   * `posts` has an entry; posts with no comments appear as
+   * `{ totalComments: 0 }`. Same lookup-then-render contract as likeSummaries.
+   */
+  commentSummaries: Record<string, CommentSummary>;
   /** Opaque base64 cursor for the next page. Null if at end. */
   nextCursor: string | null;
 }
 
 /**
  * Home-feed response. Same shape as ListMyPostsResponse with the same
- * likeSummaries semantics — every post id in this page has an entry, with
- * unliked posts present as `{ liked: false, totalLikes: 0 }`.
+ * likeSummaries / commentSummaries semantics — every post id in this page
+ * has an entry, with unliked/uncommented posts present as zero-value
+ * summaries rather than omitted.
  */
 export interface HomeFeedResponse extends FeedPage {
   likeSummaries: Record<string, LikeSummary>;
+  commentSummaries: Record<string, CommentSummary>;
+}
+
+// ── Comments ───────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/posts/:postId/comments
+ *
+ * The post id comes from the URL path, not the body — the route parameter is
+ * the canonical scope. `content` is trimmed client-side before display but
+ * we validate the raw length server-side to keep the contract tight.
+ *
+ * Max length mirrors posts (4000). Choose the same cap even though comments
+ * are typically shorter so we don't have to explain "why does the comment
+ * limit differ from posts"; easy to tighten later without breaking anyone.
+ */
+export const CreateCommentRequest = z.object({
+  content: z.string().min(1).max(4000),
+});
+export type CreateCommentRequest = z.infer<typeof CreateCommentRequest>;
+
+export interface CreateCommentResponse {
+  comment: Comment;
+  /**
+   * Updated comment summary for the parent post — lets the UI update the
+   * post's comment count pill without a separate read. Reflects the state
+   * *including* the newly created comment.
+   */
+  commentSummary: CommentSummary;
+}
+
+/**
+ * GET /api/posts/:postId/comments
+ *
+ *   ?cursor   opaque keyset cursor (createdAt desc, id desc) scoped to this post
+ *   ?limit    1..100, default 50
+ *
+ * Returns non-deleted comments only, newest first. The list endpoint returns
+ * the current commentSummary as well so the UI doesn't have to recompute a
+ * count locally after any pagination step.
+ */
+export const ListCommentsQuery = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ListCommentsQuery = z.infer<typeof ListCommentsQuery>;
+
+export interface ListCommentsResponse {
+  comments: Comment[];
+  /** Current comment summary for the parent post — total non-deleted comments. */
+  commentSummary: CommentSummary;
+  /** Opaque base64 cursor for the next page. Null if at end. */
+  nextCursor: string | null;
+}
+
+/**
+ * DELETE /api/posts/:postId/comments/:commentId
+ *
+ * Author-only soft delete. Mirrors post-delete in that the row stays in the
+ * database (for moderation review) but is invisible to future reads.
+ *
+ * Returns the updated count so the UI can decrement its badge without a
+ * follow-up fetch.
+ */
+export interface DeleteCommentResponse {
+  commentSummary: CommentSummary;
 }

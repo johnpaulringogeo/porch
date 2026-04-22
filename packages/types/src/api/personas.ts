@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Persona, Post, PublicPersona } from '../domain/index.js';
 import { usernameRegex } from './auth.js';
-import type { LikeSummary } from './posts.js';
+import type { CommentSummary, LikeSummary } from './posts.js';
 
 export const CreatePersonaRequest = z.object({
   username: z.string().regex(usernameRegex),
@@ -170,5 +170,11 @@ export interface ListPersonaPostsResponse {
    * the three list endpoints stay consumer-shaped identically.
    */
   likeSummaries: Record<string, LikeSummary>;
+  /**
+   * Comment counts per post in this page, keyed by post id. Every id in
+   * `posts` has an entry; posts with no comments appear as `{ totalComments: 0 }`.
+   * Same contract as ListMyPostsResponse / HomeFeedResponse.
+   */
+  commentSummaries: Record<string, CommentSummary>;
   nextCursor: string | null;
 }

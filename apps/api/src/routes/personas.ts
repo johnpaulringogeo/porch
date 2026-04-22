@@ -146,6 +146,7 @@ personaRoutes.get('/:username/posts', async (c) => {
   const payload: ListPersonaPostsResponse = {
     posts: result.posts,
     likeSummaries: result.likeSummaries,
+    commentSummaries: result.commentSummaries,
     nextCursor: result.nextCursor,
   };
   return c.json(payload);

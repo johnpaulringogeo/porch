@@ -94,3 +94,49 @@ export const postLike = pgTable(
 
 export type PostLike = typeof postLike.$inferSelect;
 export type NewPostLike = typeof postLike.$inferInsert;
+
+/**
+ * Comments on a post.
+ *
+ * Independent-row model — not threaded, no parentCommentId in v0. Threading
+ * adds UI complexity (collapse/expand, indented replies, ordering within a
+ * thread) that we don't want to invest in before we know whether comments
+ * will be a heavy-use surface. Adding `parentCommentId` later is a non-
+ * destructive migration — nullable column with no default — so the forward
+ * path is cheap.
+ *
+ * Soft delete: a `deletedAt` timestamp rather than a hard delete, for the
+ * same reasons as posts — moderation/abuse review needs the content to stick
+ * around, and we can tombstone the row ("[deleted]") in the UI without
+ * losing the reference for any notification/audit rows that pointed at it.
+ *
+ * Index choice: `(post_id, created_at desc, id desc)` covers the list-per-
+ * post keyset pagination cleanly. Postgres can walk it backwards for the
+ * "newest first" direction without a sort step. No author-only index yet —
+ * there's no "show me all my comments" surface in v0.
+ */
+export const postComment = pgTable(
+  'post_comment',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    postId: uuid('post_id')
+      .notNull()
+      .references(() => post.id, { onDelete: 'cascade' }),
+    authorPersonaId: uuid('author_persona_id')
+      .notNull()
+      .references(() => persona.id, { onDelete: 'cascade' }),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    editedAt: timestamp('edited_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({
+    postCreatedIdx: index('post_comment_post_created_idx').on(
+      table.postId,
+      table.createdAt,
+    ),
+  }),
+);
+
+export type PostComment = typeof postComment.$inferSelect;
+export type NewPostComment = typeof postComment.$inferInsert;

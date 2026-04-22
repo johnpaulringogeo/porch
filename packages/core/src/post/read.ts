@@ -6,10 +6,11 @@ import {
   type Post,
   type PublicPersona,
 } from '@porch/types/domain';
-import type { LikeSummary } from '@porch/types/api';
+import type { CommentSummary, LikeSummary } from '@porch/types/api';
 import { assertCanViewPost, toApiPost } from './helpers.js';
 import { getLikeSummary } from './like.js';
 import { toPublicPersona } from '../contact/helpers.js';
+import { getCommentSummary } from '../comment/index.js';
 import type { PostActor } from './create.js';
 
 /**
@@ -33,6 +34,9 @@ import type { PostActor } from './create.js';
  *
  * `likeSummary` is computed for everyone — the count is public to anyone
  * who can see the post, and `liked` reflects the *viewer's* state.
+ *
+ * `commentSummary` is the same deal — public to anyone who can see the post.
+ * No viewer-specific state on this one (yet); see CommentSummary docstring.
  */
 export async function getPost(
   db: Database,
@@ -42,6 +46,7 @@ export async function getPost(
   post: Post;
   audiencePersonas: PublicPersona[] | null;
   likeSummary: LikeSummary;
+  commentSummary: CommentSummary;
 }> {
   const row = await assertCanViewPost(db, actor, postId);
 
@@ -60,11 +65,13 @@ export async function getPost(
       : null;
 
   const likeSummary = await getLikeSummary(db, actor, row.id);
+  const commentSummary = await getCommentSummary(db, row.id);
 
   return {
     post: toApiPost(row, toPublicPersona(authorRow)),
     audiencePersonas,
     likeSummary,
+    commentSummary,
   };
 }
 

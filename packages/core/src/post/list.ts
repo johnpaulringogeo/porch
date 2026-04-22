@@ -2,9 +2,10 @@ import { and, desc, eq, isNull, lt, or } from 'drizzle-orm';
 import type { Database } from '@porch/db';
 import { persona, post } from '@porch/db';
 import type { Post } from '@porch/types/domain';
-import type { LikeSummary } from '@porch/types/api';
+import type { CommentSummary, LikeSummary } from '@porch/types/api';
 import { toApiPost } from './helpers.js';
 import { getLikeSummariesForPosts } from './like.js';
+import { getCommentSummariesForPosts } from '../comment/index.js';
 import { toPublicPersona } from '../contact/helpers.js';
 import { decodeCursor, encodeCursor } from '../feed/index.js';
 import type { PostActor } from './create.js';
@@ -23,6 +24,13 @@ export interface ListMyPostsResult {
    * has an entry — unliked posts appear as `{ liked: false, totalLikes: 0 }`.
    */
   likeSummaries: Record<string, LikeSummary>;
+  /**
+   * Comment counts per post in this page, keyed by post id. Every id in
+   * `posts` has an entry; posts with no comments appear as
+   * `{ totalComments: 0 }`. Parallel to `likeSummaries` so the UI's lookup
+   * pattern is identical for both.
+   */
+  commentSummaries: Record<string, CommentSummary>;
   nextCursor: string | null;
 }
 
@@ -62,7 +70,7 @@ export async function listMyPosts(
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   if (page.length === 0) {
-    return { posts: [], likeSummaries: {}, nextCursor: null };
+    return { posts: [], likeSummaries: {}, commentSummaries: {}, nextCursor: null };
   }
 
   const [authorRow] = await db
@@ -78,29 +86,20 @@ export async function listMyPosts(
     ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id })
     : null;
 
-  const likeSummaries = await summariesByPostId(
-    db,
-    actor,
-    page.map((row) => row.id),
-  );
+  const postIds = page.map((row) => row.id);
+  // Fetch like + comment summaries in parallel — both are independent read
+  // queries keyed on the same page of post ids.
+  const [likeMap, commentMap] = await Promise.all([
+    getLikeSummariesForPosts(db, actor, postIds),
+    getCommentSummariesForPosts(db, postIds),
+  ]);
+  const likeSummaries = Object.fromEntries(likeMap);
+  const commentSummaries = Object.fromEntries(commentMap);
 
   return {
     posts: page.map((row) => toApiPost(row, author)),
     likeSummaries,
+    commentSummaries,
     nextCursor,
   };
-}
-
-/**
- * Convenience wrapper that returns the like summaries as a plain object so
- * we can drop it directly into the API response without an extra map→object
- * step at every call site.
- */
-async function summariesByPostId(
-  db: Database,
-  actor: PostActor,
-  postIds: string[],
-): Promise<Record<string, LikeSummary>> {
-  const map = await getLikeSummariesForPosts(db, actor, postIds);
-  return Object.fromEntries(map);
 }
