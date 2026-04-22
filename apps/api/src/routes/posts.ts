@@ -8,6 +8,7 @@ import {
   EditPostRequest,
   FeedQuery,
   ListCommentsQuery,
+  UpdateCommentRequest,
   type CreateCommentResponse,
   type CreatePostResponse,
   type DeleteCommentResponse,
@@ -16,6 +17,7 @@ import {
   type LikePostResponse,
   type ListCommentsResponse,
   type ListMyPostsResponse,
+  type UpdateCommentResponse,
 } from '@porch/types/api';
 import { requireAuth } from '../middleware/auth.js';
 import type { Actor, AppBindings } from '../bindings.js';
@@ -31,6 +33,7 @@ import type { Actor, AppBindings } from '../bindings.js';
  *   POST   /:id/like                     toggle like on a post
  *   POST   /:id/comments                 create a comment on a post
  *   GET    /:id/comments                 list comments on a post (paginated)
+ *   PATCH  /:id/comments/:commentId      edit a comment (author-only, content-only)
  *   DELETE /:id/comments/:commentId      soft-delete a comment (author-only)
  *
  * All routes require auth. Validation/invariants live in @porch/core/post
@@ -244,6 +247,34 @@ postRoutes.get('/:id/comments', async (c) => {
     commentSummary: result.commentSummary,
     nextCursor: result.nextCursor,
   };
+  return c.json(payload);
+});
+
+postRoutes.patch('/:id/comments/:commentId', async (c) => {
+  const actor = requireActor(c);
+  const postId = c.req.param('id');
+  const commentId = c.req.param('commentId');
+  const body = UpdateCommentRequest.parse(await c.req.json());
+
+  const result = await CommentOps.updateComment(
+    c.var.db,
+    { personaId: actor.personaId },
+    { postId, commentId, content: body.content },
+  );
+
+  const { ipAddress, userAgent } = clientInfo(c);
+  void AuditOps.recordAudit(c.var.db, {
+    accountId: actor.accountId,
+    personaId: actor.personaId,
+    action: 'comment.update',
+    entityType: 'comment',
+    entityId: commentId,
+    metadata: { postId },
+    ipAddress,
+    userAgent,
+  });
+
+  const payload: UpdateCommentResponse = { comment: result.comment };
   return c.json(payload);
 });
 

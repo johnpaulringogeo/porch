@@ -30,6 +30,14 @@
  * button appears inline. The server returns 404 for non-author deletes so
  * we also hide the button locally to avoid the confusing "appeared to
  * work, but didn't" round-trip.
+ *
+ * Author-only edit: same gating as delete. Edit swaps the body for an
+ * inline textarea with Save/Cancel; saving calls PATCH and replaces the
+ * row in place (server returns the hydrated Comment, including a fresh
+ * `editedAt`). An "(edited)" indicator appears next to the timestamp once
+ * a comment has ever been edited — the server stamps `editedAt` on every
+ * successful PATCH, including no-op edits, so the indicator is a reliable
+ * "this author came back to this" signal.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -38,6 +46,7 @@ import type {
   CreateCommentResponse,
   DeleteCommentResponse,
   ListCommentsResponse,
+  UpdateCommentResponse,
 } from '@porch/types/api';
 import type { Comment } from '@porch/types/domain';
 import { api, ApiError } from '@/lib/api';
@@ -89,6 +98,20 @@ export function CommentsSection({
   // Per-comment deletion state — keyed by id so multiple in-flight deletes
   // stay independent (unlikely in practice but cheap to support).
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  // Per-comment edit state. Three maps keyed by comment id:
+  //   editDrafts — the textarea contents while the row is in edit mode.
+  //                Presence of a key means "this row is currently editing".
+  //   savingIds  — which rows have a PATCH in flight (disables Save/Cancel,
+  //                flips the button label).
+  //   editErrors — per-row inline error for the last failed save; cleared
+  //                on the next keystroke or on Cancel.
+  // Kept as separate maps/sets rather than one "edit state" object so each
+  // React state update touches the smallest possible slice and doesn't
+  // blow away sibling edits.
+  const [editDrafts, setEditDrafts] = useState<Record<string, string>>({});
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
   const updateSummary = useCallback(
     (next: CommentSummary) => {
@@ -225,6 +248,114 @@ export function CommentsSection({
     [accessToken, deletingIds, postId, updateSummary],
   );
 
+  const startEdit = useCallback((commentId: string, currentContent: string) => {
+    // Seed the draft with the current content so the author edits from the
+    // existing text rather than starting from a blank textarea.
+    setEditDrafts((prev) => ({ ...prev, [commentId]: currentContent }));
+    setEditErrors((prev) => {
+      if (!(commentId in prev)) return prev;
+      const next = { ...prev };
+      delete next[commentId];
+      return next;
+    });
+  }, []);
+
+  const cancelEdit = useCallback((commentId: string) => {
+    setEditDrafts((prev) => {
+      if (!(commentId in prev)) return prev;
+      const next = { ...prev };
+      delete next[commentId];
+      return next;
+    });
+    setEditErrors((prev) => {
+      if (!(commentId in prev)) return prev;
+      const next = { ...prev };
+      delete next[commentId];
+      return next;
+    });
+  }, []);
+
+  const changeEditDraft = useCallback((commentId: string, value: string) => {
+    setEditDrafts((prev) => ({ ...prev, [commentId]: value }));
+    // Clear the inline error on the next keystroke — the user is trying
+    // again, let the next submit surface a fresh result.
+    setEditErrors((prev) => {
+      if (!(commentId in prev)) return prev;
+      const next = { ...prev };
+      delete next[commentId];
+      return next;
+    });
+  }, []);
+
+  const saveEdit = useCallback(
+    async (commentId: string) => {
+      const draftValue = editDrafts[commentId];
+      if (draftValue === undefined) return;
+      const trimmed = draftValue.trim();
+      if (trimmed.length === 0) {
+        setEditErrors((prev) => ({
+          ...prev,
+          [commentId]: 'Comment cannot be empty.',
+        }));
+        return;
+      }
+      if (trimmed.length > COMMENT_CONTENT_MAX) {
+        setEditErrors((prev) => ({
+          ...prev,
+          [commentId]: `Comment is too long (max ${COMMENT_CONTENT_MAX}).`,
+        }));
+        return;
+      }
+      if (savingIds.has(commentId)) return;
+      setSavingIds((prev) => {
+        const next = new Set(prev);
+        next.add(commentId);
+        return next;
+      });
+      try {
+        const res = await api<UpdateCommentResponse>({
+          method: 'PATCH',
+          path: `/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
+          accessToken,
+          body: { content: trimmed },
+        });
+        // Replace by id — the server returns the authoritative row with a
+        // fresh `editedAt` stamp. Keep list order stable.
+        setComments((prev) =>
+          prev.map((c) => (c.id === commentId ? res.comment : c)),
+        );
+        // Exit edit mode on success.
+        setEditDrafts((prev) => {
+          if (!(commentId in prev)) return prev;
+          const next = { ...prev };
+          delete next[commentId];
+          return next;
+        });
+        setEditErrors((prev) => {
+          if (!(commentId in prev)) return prev;
+          const next = { ...prev };
+          delete next[commentId];
+          return next;
+        });
+      } catch (err) {
+        setEditErrors((prev) => ({
+          ...prev,
+          [commentId]:
+            err instanceof ApiError
+              ? err.message
+              : 'Could not save that edit.',
+        }));
+      } finally {
+        setSavingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(commentId);
+          return next;
+        });
+      }
+    },
+    [accessToken, editDrafts, postId, savingIds],
+  );
+
   return (
     <section
       id="comments"
@@ -295,8 +426,21 @@ export function CommentsSection({
       {comments.length > 0 ? (
         <ul className="space-y-3">
           {comments.map((comment) => {
-            const canDelete = comment.author.id === viewerPersonaId;
+            const isOwn = comment.author.id === viewerPersonaId;
+            const canDelete = isOwn;
+            const canEdit = isOwn;
             const isDeleting = deletingIds.has(comment.id);
+            const isEditing = comment.id in editDrafts;
+            const isSaving = savingIds.has(comment.id);
+            const editDraftValue = editDrafts[comment.id] ?? '';
+            const editTrimmed = editDraftValue.trim();
+            const editTooLong = editTrimmed.length > COMMENT_CONTENT_MAX;
+            const editSaveDisabled =
+              isSaving ||
+              editTrimmed.length === 0 ||
+              editTooLong ||
+              !accessToken;
+            const editError = editErrors[comment.id];
             return (
               <li
                 key={comment.id}
@@ -319,20 +463,84 @@ export function CommentsSection({
                   >
                     {formatTimestamp(comment.createdAt)}
                   </time>
-                </div>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {comment.content}
-                </p>
-                {canDelete ? (
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => void remove(comment.id)}
-                      disabled={isDeleting}
-                      className="inline-flex items-center rounded-md border border-red-200 px-2 py-0.5 text-[10px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  {comment.editedAt ? (
+                    <span
+                      title={`Edited ${formatTimestamp(comment.editedAt)}`}
+                      className="text-[10px] italic text-[hsl(var(--text-muted))]"
                     >
-                      {isDeleting ? 'Deleting…' : 'Delete'}
-                    </button>
+                      (edited)
+                    </span>
+                  ) : null}
+                </div>
+                {isEditing ? (
+                  <div className="space-y-1 pt-1">
+                    <textarea
+                      value={editDraftValue}
+                      onChange={(event) =>
+                        changeEditDraft(comment.id, event.target.value)
+                      }
+                      rows={3}
+                      maxLength={COMMENT_CONTENT_MAX}
+                      disabled={isSaving}
+                      aria-label="Edit comment"
+                      className="w-full resize-y rounded-md border border-[hsl(var(--border-default))] bg-white px-3 py-2 text-sm leading-relaxed outline-none focus:border-[hsl(var(--text-default))] disabled:opacity-60"
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-[hsl(var(--text-muted))]">
+                      <span>
+                        {editDraftValue.length}/{COMMENT_CONTENT_MAX}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {editError ? (
+                          <span role="alert" className="text-red-600">
+                            {editError}
+                          </span>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => cancelEdit(comment.id)}
+                          disabled={isSaving}
+                          className="inline-flex items-center rounded-md border border-[hsl(var(--border-default))] px-2 py-0.5 text-[10px] font-medium hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void saveEdit(comment.id)}
+                          disabled={editSaveDisabled}
+                          className="inline-flex items-center rounded-md bg-mode-home px-2 py-0.5 text-[10px] font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isSaving ? 'Saving…' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {comment.content}
+                  </p>
+                )}
+                {!isEditing && (canEdit || canDelete) ? (
+                  <div className="flex items-center gap-2 pt-1">
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => startEdit(comment.id, comment.content)}
+                        disabled={isDeleting}
+                        className="inline-flex items-center rounded-md border border-[hsl(var(--border-default))] px-2 py-0.5 text-[10px] font-medium hover:bg-[hsl(var(--surface-muted))] disabled:opacity-50"
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                    {canDelete ? (
+                      <button
+                        type="button"
+                        onClick={() => void remove(comment.id)}
+                        disabled={isDeleting}
+                        className="inline-flex items-center rounded-md border border-red-200 px-2 py-0.5 text-[10px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {isDeleting ? 'Deleting…' : 'Delete'}
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </li>

@@ -234,6 +234,90 @@ export async function listComments(
   };
 }
 
+// ── Update ─────────────────────────────────────────────────────────────────
+
+export interface UpdateCommentInput {
+  postId: string;
+  commentId: string;
+  content: string;
+}
+
+export interface UpdateCommentResult {
+  comment: Comment;
+}
+
+/**
+ * Edit a comment's content. Author-only. Mirrors the delete path's 404-mask
+ * for non-authors so the edit surface doesn't leak existence of a comment
+ * the caller has no business knowing about.
+ *
+ * No visibility gate — matches `deleteComment`. If the author's access to the
+ * underlying post has been revoked since the comment was written (e.g. the
+ * post was re-audienced or the author was removed from contacts), they can
+ * still edit or delete their own words.
+ *
+ * Always stamps `editedAt` on success, even for a no-op edit (same content).
+ * The server doesn't diff — the client can short-circuit identical-content
+ * saves if it cares.
+ */
+export async function updateComment(
+  db: Database,
+  actor: CommentActor,
+  input: UpdateCommentInput,
+): Promise<UpdateCommentResult> {
+  const trimmed = input.content.trim();
+  if (trimmed.length === 0) {
+    throw new PorchError(
+      ErrorCode.BadRequest,
+      'Comment content cannot be empty.',
+      'content',
+    );
+  }
+
+  const [row] = await db
+    .select()
+    .from(postComment)
+    .where(
+      and(
+        eq(postComment.id, input.commentId),
+        eq(postComment.postId, input.postId),
+        isNull(postComment.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
+    throw new PorchError(ErrorCode.NotFound, 'Comment not found.');
+  }
+  if (row.authorPersonaId !== actor.personaId) {
+    // Mask as 404 — same rationale as deleteComment.
+    throw new PorchError(ErrorCode.NotFound, 'Comment not found.');
+  }
+
+  const editedAt = new Date();
+  await db
+    .update(postComment)
+    .set({ content: trimmed, editedAt })
+    .where(eq(postComment.id, input.commentId));
+
+  const [authorRow] = await db
+    .select()
+    .from(persona)
+    .where(eq(persona.id, row.authorPersonaId))
+    .limit(1);
+  if (!authorRow) throw new Error('Comment author persona vanished mid-update');
+
+  // Construct the response from the pre-update row plus the in-flight changes.
+  // Author-only writes + no moderation path on comments today means there's
+  // no concurrent-modification shape we'd need `.returning()` to detect.
+  return {
+    comment: toApiComment(
+      { ...row, content: trimmed, editedAt },
+      toPublicPersona(authorRow),
+    ),
+  };
+}
+
 // ── Delete ─────────────────────────────────────────────────────────────────
 
 export interface DeleteCommentInput {

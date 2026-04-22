@@ -186,6 +186,30 @@ export interface ListCommentsResponse {
 }
 
 /**
+ * PATCH /api/posts/:postId/comments/:commentId
+ *
+ * Author-only edit. Content-only — there's nothing else on a comment the
+ * author could change. Max length mirrors CreateCommentRequest to keep the
+ * client-side validation symmetric.
+ *
+ * Non-authors get a 404, not a 403, matching the mask used by delete — the
+ * comment surface shouldn't leak whether a given id exists to a caller who
+ * can't act on it.
+ *
+ * Sets `editedAt` on every successful edit so the UI can render an "edited"
+ * indicator. No-op edits (same content) still bump the timestamp; the route
+ * does not diff content server-side.
+ */
+export const UpdateCommentRequest = z.object({
+  content: z.string().min(1).max(4000),
+});
+export type UpdateCommentRequest = z.infer<typeof UpdateCommentRequest>;
+
+export interface UpdateCommentResponse {
+  comment: Comment;
+}
+
+/**
  * DELETE /api/posts/:postId/comments/:commentId
  *
  * Author-only soft delete. Mirrors post-delete in that the row stays in the

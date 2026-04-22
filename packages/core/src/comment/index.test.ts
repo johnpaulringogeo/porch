@@ -31,6 +31,7 @@ import {
   getCommentSummary,
   listComments,
   toApiComment,
+  updateComment,
 } from './index.js';
 
 // ── Fake DB ────────────────────────────────────────────────────────────────
@@ -577,6 +578,141 @@ describe('deleteComment', () => {
     expect(updates).toHaveLength(1);
     expect(updates[0]!.set).toMatchObject({ deletedAt: expect.any(Date) });
     expect(result.commentSummary).toEqual({ totalComments: 3 });
+  });
+});
+
+// ── updateComment ──────────────────────────────────────────────────────────
+
+/**
+ * updateComment does NOT go through `assertCanViewPost` — matches deleteComment.
+ * Authors can still edit/delete their own words even if their access to the
+ * underlying post has been revoked. So these tests don't touch the mock.
+ */
+describe('updateComment', () => {
+  it('rejects empty content with BadRequest without touching the db', async () => {
+    const { db, updates } = makeFakeDb();
+
+    await expect(
+      updateComment(
+        db,
+        { personaId: 'persona_actor_1' },
+        { postId: 'p1', commentId: 'c1', content: '' },
+      ),
+    ).rejects.toMatchObject({
+      code: ErrorCode.BadRequest,
+      field: 'content',
+    });
+
+    expect(updates).toHaveLength(0);
+  });
+
+  it('rejects whitespace-only content with BadRequest', async () => {
+    const { db, updates } = makeFakeDb();
+
+    await expect(
+      updateComment(
+        db,
+        { personaId: 'persona_actor_1' },
+        { postId: 'p1', commentId: 'c1', content: '   \n\t  ' },
+      ),
+    ).rejects.toBeInstanceOf(PorchError);
+    expect(updates).toHaveLength(0);
+  });
+
+  it('throws NotFound when the comment row cannot be found', async () => {
+    const { db, queueSelect, updates } = makeFakeDb();
+    queueSelect([]); // lookup returns nothing
+
+    await expect(
+      updateComment(
+        db,
+        { personaId: 'persona_actor_1' },
+        { postId: 'p1', commentId: 'c_missing', content: 'new text' },
+      ),
+    ).rejects.toMatchObject({ code: ErrorCode.NotFound });
+
+    expect(updates).toHaveLength(0);
+  });
+
+  it('masks non-author edits as NotFound without updating the row', async () => {
+    const { db, queueSelect, updates } = makeFakeDb();
+    queueSelect([
+      makeCommentRow('c1', { authorPersonaId: 'persona_someone_else' }),
+    ]);
+
+    await expect(
+      updateComment(
+        db,
+        { personaId: 'persona_actor_1' },
+        { postId: 'p1', commentId: 'c1', content: 'new text' },
+      ),
+    ).rejects.toMatchObject({ code: ErrorCode.NotFound });
+
+    expect(updates).toHaveLength(0);
+  });
+
+  it('trims content and stamps editedAt on a successful edit', async () => {
+    const { db, queueSelect, updates } = makeFakeDb();
+    queueSelect([
+      makeCommentRow('c1', {
+        authorPersonaId: 'persona_actor_1',
+        content: 'old',
+      }),
+    ]);
+    // The author row fetch for response hydration.
+    queueSelect([makePersonaRow('persona_actor_1', { username: 'alice' })]);
+
+    await updateComment(
+      db,
+      { personaId: 'persona_actor_1' },
+      { postId: 'p1', commentId: 'c1', content: '  fresh text  ' },
+    );
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0]!.set).toMatchObject({
+      content: 'fresh text',
+      editedAt: expect.any(Date),
+    });
+  });
+
+  it('returns the hydrated Comment with the new content and serialized editedAt', async () => {
+    const { db, queueSelect } = makeFakeDb();
+    const createdAt = new Date('2026-04-20T12:00:00.000Z');
+    queueSelect([
+      makeCommentRow('c1', {
+        authorPersonaId: 'persona_actor_1',
+        content: 'old',
+        createdAt,
+      }),
+    ]);
+    queueSelect([
+      makePersonaRow('persona_actor_1', {
+        username: 'alice',
+        displayName: 'Alice',
+      }),
+    ]);
+
+    const before = Date.now();
+    const result = await updateComment(
+      db,
+      { personaId: 'persona_actor_1' },
+      { postId: 'p1', commentId: 'c1', content: 'new content' },
+    );
+    const after = Date.now();
+
+    expect(result.comment).toMatchObject({
+      id: 'c1',
+      postId: 'post_1',
+      content: 'new content',
+      createdAt: createdAt.toISOString(),
+      author: { id: 'persona_actor_1', username: 'alice', displayName: 'Alice' },
+    });
+    // editedAt is stamped "now" — verify it falls inside the test window and
+    // serializes as an ISO string, without asserting an exact value.
+    expect(result.comment.editedAt).not.toBeNull();
+    const editedAtMs = Date.parse(result.comment.editedAt as string);
+    expect(editedAtMs).toBeGreaterThanOrEqual(before);
+    expect(editedAtMs).toBeLessThanOrEqual(after);
   });
 });
 
