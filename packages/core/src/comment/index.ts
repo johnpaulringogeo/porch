@@ -1,14 +1,20 @@
 import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Database, PostComment as PostCommentRow } from '@porch/db';
-import { persona, postComment } from '@porch/db';
+import { persona, postAudience, postComment } from '@porch/db';
 import { ErrorCode, PorchError } from '@porch/types';
 import type { CommentSummary } from '@porch/types/api';
-import { NotificationType, type Comment, type PublicPersona } from '@porch/types/domain';
+import {
+  NotificationType,
+  PostAudienceMode,
+  type Comment,
+  type PublicPersona,
+} from '@porch/types/domain';
 import { decodeCursor, encodeCursor } from '../feed/index.js';
 import { toPublicPersona } from '../contact/helpers.js';
 import { assertCanViewPost } from '../post/helpers.js';
 import type { PostActor } from '../post/create.js';
 import { createNotification } from '../notification/index.js';
+import { extractMentions, resolveVisibleMentions } from '../mention/index.js';
 
 /**
  * Comments on posts — v0 CRUD.
@@ -119,6 +125,67 @@ export async function createComment(
       });
     } catch (err) {
       console.error('comment-created-notify-failed', err);
+    }
+  }
+
+  // Fan out one MentionedInComment notification per @-mentioned persona that's
+  // actually allowed to see the PARENT post. Comments inherit the post's
+  // audience rules — mentioning a persona in a comment shouldn't reach them
+  // if they wouldn't be allowed to read the post itself.
+  //
+  // The resolver's `authorPersonaId` is the commenter (drives the self-mention
+  // filter: a commenter pinging themselves is noise). `postAuthorPersonaId` is
+  // the post's author — drives the audience gate (contacts-of-postAuthor for
+  // all_contacts, the post's hand-picked audience for selected). The post
+  // author always passes the gate; a mention of Bob in a comment on Bob's own
+  // post reaches Bob even though Bob isn't in his own audience/contacts.
+  //
+  // For selected-mode parent posts, we fetch the audience persona IDs here —
+  // `assertCanViewPost` returns the post row but not its audience snapshot.
+  // The lookup is skipped for all_contacts posts (resolver hits the contact
+  // table directly) and when there are no mentions at all.
+  //
+  // Fire-and-forget on a per-row basis, matching createPost's mention loop.
+  // A resolver-wide failure is caught and logged without blocking the return.
+  const mentionedUsernames = extractMentions(trimmed);
+  if (mentionedUsernames.length > 0) {
+    try {
+      let audiencePersonaIds: string[] = [];
+      if (postRow.audienceMode === PostAudienceMode.Selected) {
+        const audienceRows = await db
+          .select({ id: postAudience.audiencePersonaId })
+          .from(postAudience)
+          .where(eq(postAudience.postId, postRow.id));
+        audiencePersonaIds = audienceRows.map((r) => r.id);
+      }
+
+      const recipientIds = await resolveVisibleMentions(db, mentionedUsernames, {
+        authorPersonaId: actor.personaId,
+        postAuthorPersonaId: postRow.authorPersonaId,
+        audienceMode: postRow.audienceMode as PostAudienceMode,
+        audiencePersonaIds,
+      });
+      await Promise.all(
+        recipientIds.map(async (recipientId) => {
+          try {
+            await createNotification(db, {
+              recipientPersonaId: recipientId,
+              type: NotificationType.MentionedInComment,
+              payload: {
+                postId: input.postId,
+                commentId: row.id,
+                byPersonaId: actor.personaId,
+              },
+            });
+          } catch (err) {
+            console.error('mentioned-in-comment-notify-failed', err);
+          }
+        }),
+      );
+    } catch (err) {
+      // resolveVisibleMentions or the audience lookup flaking mustn't fail
+      // the whole createComment — the comment is already persisted.
+      console.error('mentioned-in-comment-resolve-failed', err);
     }
   }
 

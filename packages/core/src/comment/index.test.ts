@@ -349,6 +349,174 @@ describe('createComment', () => {
     // Only the comment insert — no notification.
     expect(inserts).toHaveLength(1);
   });
+
+  // ── Mention fan-out (MentionedInComment) ─────────────────────────────────
+  //
+  // Comments inherit the parent post's audience rules via `resolveVisibleMentions`.
+  // The commenter is the "writer" (self-mention filter); the post author is
+  // the "audience owner" (contact/audience-set check). Tests here assume the
+  // post author is different from the commenter so the CommentCreated fan-out
+  // also fires — the third insert (if any) is the MentionedInComment.
+
+  it('fans out a MentionedInComment notification for each mentioned persona visible under the post audience', async () => {
+    const { db, inserts, queueSelect, queueInsertReturning } = makeFakeDb();
+    vi.mocked(assertCanViewPost).mockResolvedValueOnce({
+      id: 'post_1',
+      authorPersonaId: 'persona_post_author',
+      audienceMode: 'all_contacts',
+    } as never);
+    queueInsertReturning([
+      makeCommentRow('c1', { content: 'hey @bob thanks' }),
+    ]);
+    queueSelect([makePersonaRow('persona_actor_1')]); // commenter author lookup
+    queueSelect([{ total: 1 }]); // getCommentSummary
+
+    // Mention resolver:
+    //   1. persona lookup for ['bob']
+    //   2. contact lookup (all_contacts mode) — bob IS a contact of post author
+    queueSelect([{ id: 'persona_bob', username: 'bob' }]);
+    queueSelect([{ id: 'persona_bob' }]);
+
+    await createComment(
+      db,
+      { personaId: 'persona_actor_1' },
+      { postId: 'post_1', content: 'hey @bob thanks' },
+    );
+
+    // Three inserts: the comment, the CommentCreated (post author ≠ actor),
+    // and the MentionedInComment for bob.
+    expect(inserts).toHaveLength(3);
+    expect(inserts[2]!.values).toMatchObject({
+      recipientPersonaId: 'persona_bob',
+      type: 'mentioned_in_comment',
+      payload: {
+        postId: 'post_1',
+        commentId: 'c1',
+        byPersonaId: 'persona_actor_1',
+      },
+    });
+  });
+
+  it('always pings the post author when mentioned in a comment on their own post', async () => {
+    const { db, inserts, queueSelect, queueInsertReturning } = makeFakeDb();
+    // Post author's own visibility/contact status is irrelevant for this
+    // mention — the resolver short-circuits post-author candidates past the
+    // audience gate. No contact lookup is queued.
+    vi.mocked(assertCanViewPost).mockResolvedValueOnce({
+      id: 'post_1',
+      authorPersonaId: 'persona_post_author',
+      audienceMode: 'all_contacts',
+    } as never);
+    queueInsertReturning([
+      makeCommentRow('c1', { content: '@bob great take' }),
+    ]);
+    queueSelect([makePersonaRow('persona_actor_1')]);
+    queueSelect([{ total: 1 }]);
+    // Only the persona lookup — no contact query, since the only candidate IS
+    // the post author and gets waved through.
+    queueSelect([{ id: 'persona_post_author', username: 'bob' }]);
+
+    await createComment(
+      db,
+      { personaId: 'persona_actor_1' },
+      { postId: 'post_1', content: '@bob great take' },
+    );
+
+    expect(inserts).toHaveLength(3);
+    expect(inserts[2]!.values).toMatchObject({
+      recipientPersonaId: 'persona_post_author',
+      type: 'mentioned_in_comment',
+    });
+  });
+
+  it('drops @-mentions of personas not in the post audience (no ping side-channel)', async () => {
+    const { db, inserts, queueSelect, queueInsertReturning } = makeFakeDb();
+    vi.mocked(assertCanViewPost).mockResolvedValueOnce({
+      id: 'post_1',
+      authorPersonaId: 'persona_post_author',
+      audienceMode: 'all_contacts',
+    } as never);
+    queueInsertReturning([
+      makeCommentRow('c1', { content: 'hey @stranger look' }),
+    ]);
+    queueSelect([makePersonaRow('persona_actor_1')]);
+    queueSelect([{ total: 1 }]);
+    // Stranger exists but isn't a contact of the post author — gate drops them.
+    queueSelect([{ id: 'persona_stranger', username: 'stranger' }]);
+    queueSelect([]); // empty contact lookup
+
+    await createComment(
+      db,
+      { personaId: 'persona_actor_1' },
+      { postId: 'post_1', content: 'hey @stranger look' },
+    );
+
+    // Comment + CommentCreated only — no MentionedInComment for the stranger.
+    expect(inserts).toHaveLength(2);
+    expect(inserts.map((i) => (i.values as { type?: string }).type)).not.toContain(
+      'mentioned_in_comment',
+    );
+  });
+
+  it('does not self-ping the commenter when they @-mention themselves', async () => {
+    const { db, inserts, queueSelect, queueInsertReturning } = makeFakeDb();
+    vi.mocked(assertCanViewPost).mockResolvedValueOnce({
+      id: 'post_1',
+      authorPersonaId: 'persona_post_author',
+      audienceMode: 'all_contacts',
+    } as never);
+    queueInsertReturning([
+      makeCommentRow('c1', { content: '@alice signing off' }),
+    ]);
+    queueSelect([makePersonaRow('persona_actor_1', { username: 'alice' })]);
+    queueSelect([{ total: 1 }]);
+    // Persona lookup resolves alice → the commenter. The resolver's
+    // self-mention filter drops them before the audience gate, so no contact
+    // query is issued.
+    queueSelect([{ id: 'persona_actor_1', username: 'alice' }]);
+
+    await createComment(
+      db,
+      { personaId: 'persona_actor_1' },
+      { postId: 'post_1', content: '@alice signing off' },
+    );
+
+    // Comment + CommentCreated only — no MentionedInComment to self.
+    expect(inserts).toHaveLength(2);
+    expect(inserts.map((i) => (i.values as { type?: string }).type)).not.toContain(
+      'mentioned_in_comment',
+    );
+  });
+
+  it('reads the post audience snapshot before resolving mentions on a selected-mode post', async () => {
+    const { db, inserts, queueSelect, queueInsertReturning } = makeFakeDb();
+    vi.mocked(assertCanViewPost).mockResolvedValueOnce({
+      id: 'post_1',
+      authorPersonaId: 'persona_post_author',
+      audienceMode: 'selected',
+    } as never);
+    queueInsertReturning([
+      makeCommentRow('c1', { content: 'hi @carol' }),
+    ]);
+    queueSelect([makePersonaRow('persona_actor_1')]);
+    queueSelect([{ total: 1 }]);
+    // Selected mode → the fan-out fetches postAudience before the resolver.
+    queueSelect([{ id: 'persona_carol' }]);
+    // Resolver: persona lookup + audience-set membership (in-process, no DB).
+    queueSelect([{ id: 'persona_carol', username: 'carol' }]);
+
+    await createComment(
+      db,
+      { personaId: 'persona_actor_1' },
+      { postId: 'post_1', content: 'hi @carol' },
+    );
+
+    expect(inserts).toHaveLength(3);
+    expect(inserts[2]!.values).toMatchObject({
+      recipientPersonaId: 'persona_carol',
+      type: 'mentioned_in_comment',
+    });
+  });
 });
 
 // ── listComments ───────────────────────────────────────────────────────────

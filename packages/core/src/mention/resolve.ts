@@ -7,12 +7,37 @@ import { PostAudienceMode } from '@porch/types/domain';
  * Context the resolver needs to decide who, of the set of mentioned handles,
  * is actually allowed to receive a notification for a given post.
  *
+ * Two persona fields, deliberately separated so comment mentions work:
+ *   - `authorPersonaId` is the *writer* — the persona who produced the text
+ *     we're resolving mentions from. For a post mention, that's the post
+ *     author. For a comment mention, that's the commenter.
+ *   - `postAuthorPersonaId` is the persona whose audience governs visibility.
+ *     For post mentions this is the same persona as the writer. For comment
+ *     mentions it's the PARENT post's author — comments inherit the post's
+ *     audience rules.
+ *
+ * If `postAuthorPersonaId` is omitted, it defaults to `authorPersonaId` —
+ * keeping the post-mention caller shape unchanged while letting comment
+ * callers override.
+ *
  * `audiencePersonaIds` is required (and assumed pre-validated to be the
- * author's contacts) when `audienceMode === 'selected'`. For `all_contacts`
- * it's ignored — the resolver queries the contact table directly.
+ * post author's contacts) when `audienceMode === 'selected'`. For
+ * `all_contacts` it's ignored — the resolver queries the contact table
+ * directly.
  */
 export interface MentionVisibilityContext {
+  /**
+   * Persona who wrote the containing content (post author or commenter).
+   * Self-mentions by this persona are filtered out — nobody wants a ping
+   * for tagging themselves.
+   */
   authorPersonaId: string;
+  /**
+   * Persona whose audience governs visibility — the owning post's author.
+   * Defaults to `authorPersonaId` when absent (the post-mention case,
+   * where writer and post-author are the same).
+   */
+  postAuthorPersonaId?: string;
   audienceMode: PostAudienceMode;
   audiencePersonaIds?: string[];
 }
@@ -26,14 +51,17 @@ export interface MentionVisibilityContext {
  *   1. Resolve handles → persona rows. Archived personas (`archivedAt IS
  *      NOT NULL`) are excluded — they've opted out of receiving anything.
  *      Unknown handles silently drop out; the author probably typo'd.
- *   2. Drop the author (self-mention). Mentioning yourself in your own
- *      post isn't a notification event.
- *   3. Audience gate:
+ *   2. Drop the writer (self-mention). Mentioning yourself in your own
+ *      content isn't a notification event.
+ *   3. Audience gate. The post's author always passes this gate — a comment
+ *      on Bob's post that mentions Bob should reach Bob, even though Bob
+ *      isn't in his own `selected` audience list and isn't a contact of
+ *      himself. For everyone else:
  *        - `selected`: recipient must be in the hand-picked
  *          `audiencePersonaIds`. We already trust that set to be contacts.
  *        - `all_contacts`: recipient must be a current mutual contact of
- *          the author (one row in `contact` with ownerPersonaId=author and
- *          contactPersonaId=recipient).
+ *          the POST AUTHOR (one row in `contact` with
+ *          ownerPersonaId=postAuthor and contactPersonaId=recipient).
  *      Mentioning a persona who exists but isn't in the audience is
  *      silently dropped — we don't want a mention ping to be a sidechannel
  *      for post visibility ("alice mentioned you in a post you can't see").
@@ -57,6 +85,9 @@ export async function resolveVisibleMentions(
 ): Promise<string[]> {
   if (usernames.length === 0) return [];
 
+  const postAuthorPersonaId =
+    context.postAuthorPersonaId ?? context.authorPersonaId;
+
   // 1. Resolve handles → active personas.
   const rows = await db
     .select({ id: persona.id, username: persona.username })
@@ -75,30 +106,54 @@ export async function resolveVisibleMentions(
     return pa - pb;
   });
 
-  // 2. Drop self-mentions.
-  const nonAuthorIds = rows
+  // 2. Drop self-mentions (the writer).
+  const nonWriterIds = rows
     .filter((r) => r.id !== context.authorPersonaId)
     .map((r) => r.id);
-  if (nonAuthorIds.length === 0) return [];
+  if (nonWriterIds.length === 0) return [];
 
-  // 3. Audience gate.
-  if (context.audienceMode === PostAudienceMode.Selected) {
-    const audience = new Set(context.audiencePersonaIds ?? []);
-    return nonAuthorIds.filter((id) => audience.has(id));
+  // 3. Audience gate. Post author always passes — same rationale as the
+  // visibility check in assertCanViewPost: the post author can always see
+  // their own post, so a mention of them in a comment on it is reachable.
+  //
+  // Split the candidates into (post-author passes) + (needs-gating). We
+  // still have to gate the rest.
+  const needsGate: string[] = [];
+  const passed: string[] = [];
+  for (const id of nonWriterIds) {
+    if (id === postAuthorPersonaId) {
+      passed.push(id);
+    } else {
+      needsGate.push(id);
+    }
   }
 
-  // all_contacts: check the contact table. One query scoped to the
-  // candidates we've already narrowed down — bounded by the mention count,
-  // not the author's full contact list.
-  const contacts = await db
-    .select({ id: contact.contactPersonaId })
-    .from(contact)
-    .where(
-      and(
-        eq(contact.ownerPersonaId, context.authorPersonaId),
-        inArray(contact.contactPersonaId, nonAuthorIds),
-      ),
-    );
-  const allowed = new Set(contacts.map((c) => c.id));
-  return nonAuthorIds.filter((id) => allowed.has(id));
+  if (needsGate.length === 0) {
+    // Only the post author survived — return in the original order.
+    return nonWriterIds.filter((id) => passed.includes(id));
+  }
+
+  let gated: Set<string>;
+  if (context.audienceMode === PostAudienceMode.Selected) {
+    gated = new Set(context.audiencePersonaIds ?? []);
+  } else {
+    // all_contacts: check the contact table. One query scoped to the
+    // candidates we've already narrowed down — bounded by the mention count,
+    // not the post author's full contact list.
+    const contacts = await db
+      .select({ id: contact.contactPersonaId })
+      .from(contact)
+      .where(
+        and(
+          eq(contact.ownerPersonaId, postAuthorPersonaId),
+          inArray(contact.contactPersonaId, needsGate),
+        ),
+      );
+    gated = new Set(contacts.map((c) => c.id));
+  }
+
+  // Merge the passed set with the gated survivors, preserving the original
+  // extractor order.
+  const allowed = new Set([...passed, ...needsGate.filter((id) => gated.has(id))]);
+  return nonWriterIds.filter((id) => allowed.has(id));
 }
