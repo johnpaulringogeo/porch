@@ -53,6 +53,7 @@ import { useAuth } from '@/lib/auth-context';
 import { formatTimestamp } from '@/lib/format-time';
 import { UsernameLink } from '@/components/username-link';
 import { CommentsSection } from '@/components/comments-section';
+import { PostContent } from '@/components/post-content';
 
 const POST_CONTENT_MAX = 4000;
 
@@ -399,9 +400,10 @@ function PostCard({
           </div>
         </div>
       ) : (
-        <p className="whitespace-pre-wrap text-base leading-relaxed">
-          {post.content}
-        </p>
+        <PostContent
+          content={post.content}
+          className="whitespace-pre-wrap text-base leading-relaxed"
+        />
       )}
 
       <footer className="flex flex-wrap items-center gap-2 text-xs text-[hsl(var(--text-muted))]">

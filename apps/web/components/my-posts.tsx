@@ -29,6 +29,7 @@ import { useAuth } from '@/lib/auth-context';
 import { formatTimestamp } from '@/lib/format-time';
 import { LikeCount } from '@/components/like-pill';
 import { CommentCount } from '@/components/comment-pill';
+import { PostContent } from '@/components/post-content';
 
 interface MyPostsProps {
   refreshKey: number;
@@ -152,7 +153,10 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <p className="whitespace-pre-wrap text-sm">{post.content}</p>
+                <PostContent
+                  content={post.content}
+                  className="whitespace-pre-wrap text-sm"
+                />
                 <p className="mt-2 flex items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
                   <Link
                     href={`/p/${post.id}`}

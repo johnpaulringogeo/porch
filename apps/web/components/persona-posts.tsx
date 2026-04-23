@@ -35,6 +35,7 @@ import { useAuth } from '@/lib/auth-context';
 import { formatTimestamp } from '@/lib/format-time';
 import { InlineLikeButton, LikeCount } from '@/components/like-pill';
 import { CommentCount } from '@/components/comment-pill';
+import { PostContent } from '@/components/post-content';
 
 interface PersonaPostsProps {
   username: string;
@@ -138,7 +139,10 @@ export function PersonaPosts({ username, isSelf }: PersonaPostsProps) {
             key={post.id}
             className="rounded-lg border border-[hsl(var(--border-default))] bg-[hsl(var(--surface-default))] p-4"
           >
-            <p className="whitespace-pre-wrap text-sm">{post.content}</p>
+            <PostContent
+              content={post.content}
+              className="whitespace-pre-wrap text-sm"
+            />
             <footer className="mt-3 flex items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
               <Link
                 href={`/p/${post.id}`}

@@ -12,6 +12,7 @@
     "./persona": "./src/persona/index.ts",
     "./contact": "./src/contact/index.ts",
     "./post": "./src/post/index.ts",
+    "./mention": "./src/mention/extract.ts",
     "./feed": "./src/feed/index.ts",
     "./notification": "./src/notification/index.ts",
     "./moderation": "./src/moderation/index.ts",

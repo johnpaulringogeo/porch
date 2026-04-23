@@ -52,6 +52,7 @@ import type { Comment } from '@porch/types/domain';
 import { api, ApiError } from '@/lib/api';
 import { formatTimestamp } from '@/lib/format-time';
 import { UsernameLink } from '@/components/username-link';
+import { PostContent } from '@/components/post-content';
 
 const COMMENT_CONTENT_MAX = 4000;
 
@@ -515,9 +516,10 @@ export function CommentsSection({
                     </div>
                   </div>
                 ) : (
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {comment.content}
-                  </p>
+                  <PostContent
+                    content={comment.content}
+                    className="whitespace-pre-wrap text-sm leading-relaxed"
+                  />
                 )}
                 {!isEditing && (canEdit || canDelete) ? (
                   <div className="flex items-center gap-2 pt-1">

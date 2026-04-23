@@ -24,6 +24,7 @@ import { formatTimestamp } from '@/lib/format-time';
 import { InlineLikeButton } from '@/components/like-pill';
 import { CommentCount } from '@/components/comment-pill';
 import { UsernameLink } from '@/components/username-link';
+import { PostContent } from '@/components/post-content';
 
 export function HomeFeed() {
   const { accessToken } = useAuth();
@@ -134,7 +135,10 @@ export function HomeFeed() {
                 className="text-xs text-[hsl(var(--text-muted))] underline-offset-2 hover:underline"
               />
             </header>
-            <p className="mt-2 whitespace-pre-wrap text-sm">{post.content}</p>
+            <PostContent
+              content={post.content}
+              className="mt-2 whitespace-pre-wrap text-sm"
+            />
             <footer className="mt-3 flex items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
               <Link
                 href={`/p/${post.id}`}
