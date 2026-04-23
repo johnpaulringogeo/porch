@@ -174,6 +174,22 @@ export default function AccountSettingsPage() {
             </dl>
           </section>
 
+          <section className="space-y-2">
+            <h2 className="text-sm font-medium">Activity</h2>
+            <div className="rounded-md border border-[hsl(var(--border-default))] bg-[hsl(var(--surface-default))] px-4 py-3 text-sm">
+              <p className="text-[hsl(var(--text-muted))]">
+                Review sign-ins, persona switches, and other actions on your
+                account.
+              </p>
+              <Link
+                href="/settings/account/activity"
+                className="mt-2 inline-flex items-center text-sm font-medium underline underline-offset-2"
+              >
+                View activity log →
+              </Link>
+            </div>
+          </section>
+
           {account.status === 'deletion_requested' ? (
             <PendingDeletionBanner
               account={account}

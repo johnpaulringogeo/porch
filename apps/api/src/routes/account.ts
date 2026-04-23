@@ -3,10 +3,12 @@ import type { Context } from 'hono';
 import { deleteCookie } from 'hono/cookie';
 import { AccountOps, AuditOps } from '@porch/core';
 import { ErrorCode, PorchError } from '@porch/types';
-import type {
-  CancelAccountDeletionResponse,
-  GetAccountMeResponse,
-  RequestAccountDeletionResponse,
+import {
+  ListAccountAuditQuery,
+  type CancelAccountDeletionResponse,
+  type GetAccountMeResponse,
+  type ListAccountAuditResponse,
+  type RequestAccountDeletionResponse,
 } from '@porch/types/api';
 import { requireAuth } from '../middleware/auth.js';
 import type { Actor, AppBindings } from '../bindings.js';
@@ -18,9 +20,10 @@ import type { Actor, AppBindings } from '../bindings.js';
  *   GET  /me                 account info + deletion-grace state
  *   POST /delete             request deletion (starts 30-day grace)
  *   POST /delete/cancel      cancel pending deletion
+ *   GET  /audit              paginated activity log for this account
  *
- * The export and full audit endpoints are still todos — they're the next
- * slice in the account section.
+ * The data-export endpoint (POST /export) is still a 501 stub; it lands with
+ * the scheduled-job runner in v0.5 per spec §18.5.
  */
 export const accountRoutes = new Hono<AppBindings>();
 
@@ -102,6 +105,43 @@ accountRoutes.post('/delete/cancel', async (c) => {
   });
 
   const payload: CancelAccountDeletionResponse = { account };
+  return c.json(payload);
+});
+
+// ── Audit / activity log ───────────────────────────────────────────────────
+
+/**
+ * Paginated activity log for the caller's own account. Only rows whose
+ * `account_id = actor.accountId` are returned — system-level entries stay
+ * invisible here. Newest first, keyset-paginated with an opaque base64
+ * cursor so the UI can implement a "load more" affordance without exposing
+ * row IDs in the URL.
+ *
+ * No audit entry is written for reading the audit log — otherwise a settings
+ * page visit creates a row that appears on the next refresh, which is noisy
+ * and (mildly) recursive.
+ */
+accountRoutes.get('/audit', async (c) => {
+  const actor = requireActor(c);
+  const parsed = ListAccountAuditQuery.parse({
+    cursor: c.req.query('cursor'),
+    limit: c.req.query('limit'),
+  });
+
+  const decodedCursor = parsed.cursor
+    ? AuditOps.decodeCursor(parsed.cursor)
+    : null;
+
+  const result = await AuditOps.listAccountAudit(c.var.db, {
+    accountId: actor.accountId,
+    limit: parsed.limit,
+    cursor: decodedCursor ?? undefined,
+  });
+
+  const payload: ListAccountAuditResponse = {
+    entries: result.entries,
+    nextCursor: result.nextCursor,
+  };
   return c.json(payload);
 });
 
