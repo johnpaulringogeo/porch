@@ -34,6 +34,44 @@ export const NotificationType = {
    * notification alongside the soft delete.
    */
   CommentCreated: 'comment_created',
+  /**
+   * The recipient was @-mentioned in the body of a post.
+   * Payload: { postId, byPersonaId }. Fires once per post-create per distinct
+   * mentioned persona — the extractor dedupes repeats so `@alice @alice` only
+   * produces one notification.
+   *
+   * Audience-gated: mentions only fan out to personas who can actually see
+   * the post. For `all_contacts` mode, that's the author's mutual contacts.
+   * For `selected` mode, the hand-picked audience. Mentioning a handle that
+   * exists but isn't in the audience is silently dropped — we'd rather lose
+   * a ping than leak visibility through a notification.
+   *
+   * Self-mentions (author mentions their own handle) are filtered out.
+   * Unknown handles (no persona row) are dropped — author probably typo'd.
+   *
+   * One row per mentioned persona. If a recipient is ALSO in the hand-picked
+   * audience of a `selected` post, they get both this and a
+   * `post_selected_audience` row — intentional; mention is the stronger
+   * signal, and the UI can coalesce later if that becomes noisy.
+   */
+  MentionedInPost: 'mentioned_in_post',
+  /**
+   * The recipient was @-mentioned in the body of a comment.
+   * Payload: { postId, commentId, byPersonaId }. Fires once per
+   * comment-create per distinct mentioned persona (same dedup rules as
+   * MentionedInPost).
+   *
+   * Audience-gated against the PARENT post's visibility — a mention to
+   * someone who can't see the post can't reach them anyway, so we drop
+   * the notification rather than linking them to a 404. Self-mentions and
+   * unknown handles are filtered the same way.
+   *
+   * A comment can produce both this and a `comment_created` row when the
+   * post author is also mentioned in the comment body. Both fire because
+   * they carry different meaning — one is "someone replied to your post",
+   * the other is "someone tagged you by name".
+   */
+  MentionedInComment: 'mentioned_in_comment',
   PostModerated: 'post_moderated',
   AccountModerated: 'account_moderated',
   System: 'system',

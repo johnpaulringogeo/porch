@@ -8,6 +8,8 @@ export const notificationType = pgEnum('notification_type', [
   'post_selected_audience',
   'post_liked',
   'comment_created',
+  'mentioned_in_post',
+  'mentioned_in_comment',
   'post_moderated',
   'account_moderated',
   'system',

@@ -43,6 +43,13 @@
       "when": 1776898428110,
       "tag": "0005_rainy_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776904218922,
+      "tag": "0006_lonely_sage",
+      "breakpoints": true
     }
   ]
 }

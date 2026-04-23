@@ -436,6 +436,48 @@ function NotificationBody({ notification: n }: { notification: ApiNotification }
         </p>
       );
     }
+    case NotificationType.MentionedInPost: {
+      // Recipient was @-mentioned in the post's body. The resolver already
+      // confirmed the recipient is allowed to see the post — a `selected`
+      // audience member or a contact for `all_contacts` — so deep-linking
+      // is safe. If visibility has changed since (audience edited, contact
+      // removed), the post page itself surfaces a 404 / not-permitted state.
+      const postId =
+        typeof n.payload?.postId === 'string' ? n.payload.postId : null;
+      return (
+        <p>
+          {actorEl} mentioned you in a post.{' '}
+          {postId ? (
+            <Link
+              href={`/p/${postId}`}
+              className="text-mode-home underline-offset-2 hover:underline"
+            >
+              View
+            </Link>
+          ) : null}
+        </p>
+      );
+    }
+    case NotificationType.MentionedInComment: {
+      // Recipient was @-mentioned in a comment on a post they can see.
+      // Same deep-link treatment as CommentCreated — the post detail page
+      // renders the comment thread and the mention is visible in context.
+      const postId =
+        typeof n.payload?.postId === 'string' ? n.payload.postId : null;
+      return (
+        <p>
+          {actorEl} mentioned you in a comment.{' '}
+          {postId ? (
+            <Link
+              href={`/p/${postId}`}
+              className="text-mode-home underline-offset-2 hover:underline"
+            >
+              View
+            </Link>
+          ) : null}
+        </p>
+      );
+    }
     case NotificationType.PostModerated:
       return (
         <p>

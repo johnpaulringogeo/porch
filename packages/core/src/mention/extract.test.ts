@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractMentions, tokenizeMentions } from './index.js';
+import { extractMentions, tokenizeMentions } from './extract.js';
 
 describe('extractMentions', () => {
   it('pulls a single mention out of a sentence', () => {

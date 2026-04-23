@@ -11,6 +11,7 @@ import {
 import { toApiPost } from './helpers.js';
 import { toPublicPersona } from '../contact/helpers.js';
 import { createNotification } from '../notification/index.js';
+import { extractMentions, resolveVisibleMentions } from '../mention/index.js';
 
 export interface PostActor {
   personaId: string;
@@ -138,6 +139,47 @@ export async function createPost(
         }
       }),
     );
+  }
+
+  // Fan out one MentionedInPost notification per @-mentioned persona that's
+  // actually allowed to see this post. The resolver enforces:
+  //   - persona exists + not archived
+  //   - not the author (self-mention filter)
+  //   - in the post's audience (contacts for all_contacts, hand-picked set
+  //     for selected)
+  //
+  // A selected-mode mention of someone already in `audienceIds` produces
+  // BOTH a PostSelectedAudience row and a MentionedInPost row — intentional;
+  // they carry different meanings, and the UI can coalesce later if needed.
+  //
+  // Fire-and-forget on a per-row basis (same posture as the selected-audience
+  // loop above). One bad insert shouldn't suppress the rest.
+  const mentionedUsernames = extractMentions(input.content);
+  if (mentionedUsernames.length > 0) {
+    try {
+      const recipientIds = await resolveVisibleMentions(db, mentionedUsernames, {
+        authorPersonaId: actor.personaId,
+        audienceMode: input.audienceMode,
+        audiencePersonaIds: audienceIds,
+      });
+      await Promise.all(
+        recipientIds.map(async (recipientId) => {
+          try {
+            await createNotification(db, {
+              recipientPersonaId: recipientId,
+              type: NotificationType.MentionedInPost,
+              payload: { postId: inserted.id, byPersonaId: actor.personaId },
+            });
+          } catch (err) {
+            console.error('mentioned-in-post-notify-failed', err);
+          }
+        }),
+      );
+    } catch (err) {
+      // resolveVisibleMentions failing (DB flake, etc.) mustn't fail the
+      // whole createPost. Log and move on — the post is already persisted.
+      console.error('mentioned-in-post-resolve-failed', err);
+    }
   }
 
   return toApiPost(inserted, toPublicPersona(authorRow));
