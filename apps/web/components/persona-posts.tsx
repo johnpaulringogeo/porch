@@ -36,6 +36,7 @@ import { formatTimestamp } from '@/lib/format-time';
 import { InlineLikeButton, LikeCount } from '@/components/like-pill';
 import { CommentCount } from '@/components/comment-pill';
 import { PostContent } from '@/components/post-content';
+import { ModeratedPostBody } from '@/components/moderated-post-body';
 
 interface PersonaPostsProps {
   username: string;
@@ -139,10 +140,19 @@ export function PersonaPosts({ username, isSelf }: PersonaPostsProps) {
             key={post.id}
             className="rounded-lg border border-[hsl(var(--border-default))] bg-[hsl(var(--surface-default))] p-4"
           >
-            <PostContent
-              content={post.content}
-              className="whitespace-pre-wrap text-sm"
-            />
+            {/*
+              On a profile page every row is by the profile owner. When the
+              viewer is viewing their own profile (isSelf) they are the
+              author of every post here, so isAuthor=isSelf straight
+              through. For any other viewer, isAuthor=false and the
+              moderation decision tree in ModeratedPostBody kicks in.
+            */}
+            <ModeratedPostBody post={post} isAuthor={isSelf}>
+              <PostContent
+                content={post.content}
+                className="whitespace-pre-wrap text-sm"
+              />
+            </ModeratedPostBody>
             <footer className="mt-3 flex items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
               <Link
                 href={`/p/${post.id}`}
@@ -158,9 +168,9 @@ export function PersonaPosts({ username, isSelf }: PersonaPostsProps) {
                   selected
                 </span>
               ) : null}
-              {post.moderationState === 'limited' ? (
+              {post.moderationState !== 'ok' ? (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
-                  limited
+                  {post.moderationState.replace('_', ' ')}
                 </span>
               ) : null}
               {isSelf ? (

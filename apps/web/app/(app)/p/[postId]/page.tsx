@@ -54,6 +54,7 @@ import { formatTimestamp } from '@/lib/format-time';
 import { UsernameLink } from '@/components/username-link';
 import { CommentsSection } from '@/components/comments-section';
 import { PostContent } from '@/components/post-content';
+import { ModeratedPostBody } from '@/components/moderated-post-body';
 
 const POST_CONTENT_MAX = 4000;
 
@@ -400,10 +401,12 @@ function PostCard({
           </div>
         </div>
       ) : (
-        <PostContent
-          content={post.content}
-          className="whitespace-pre-wrap text-base leading-relaxed"
-        />
+        <ModeratedPostBody post={post} isAuthor={isAuthor}>
+          <PostContent
+            content={post.content}
+            className="whitespace-pre-wrap text-base leading-relaxed"
+          />
+        </ModeratedPostBody>
       )}
 
       <footer className="flex flex-wrap items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
@@ -434,11 +437,13 @@ function PostCard({
         accessToken={accessToken}
       />
 
-      {post.moderationReason ? (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          {post.moderationReason}
-        </p>
-      ) : null}
+      {/*
+        The standalone moderationReason block that used to live here was
+        folded into <ModeratedPostBody>: authors see the reason on their
+        banner above the body, and non-authors see it inline on the
+        "Reveal" replacement block for `limited`. One render site, one
+        source of copy — the body component owns moderation UX now.
+      */}
 
       {isAuthor ? (
         <div className="border-t border-[hsl(var(--border-default))] pt-4">

@@ -25,6 +25,7 @@ import { InlineLikeButton } from '@/components/like-pill';
 import { CommentCount } from '@/components/comment-pill';
 import { UsernameLink } from '@/components/username-link';
 import { PostContent } from '@/components/post-content';
+import { ModeratedPostBody } from '@/components/moderated-post-body';
 
 export function HomeFeed() {
   const { accessToken } = useAuth();
@@ -135,10 +136,22 @@ export function HomeFeed() {
                 className="text-xs text-[hsl(var(--text-muted))] underline-offset-2 hover:underline"
               />
             </header>
-            <PostContent
-              content={post.content}
-              className="mt-2 whitespace-pre-wrap text-sm"
-            />
+            {/*
+              Home feed posts are always by someone *else* (audience rules
+              require mutual-contact, and you are not in your own contact
+              graph) — so the author-override branch in ModeratedPostBody
+              is unreachable from here. Hard-code isAuthor={false}; if we
+              ever relax audience rules, the component will still behave
+              correctly without a code change at this site.
+            */}
+            <div className="mt-2">
+              <ModeratedPostBody post={post} isAuthor={false}>
+                <PostContent
+                  content={post.content}
+                  className="whitespace-pre-wrap text-sm"
+                />
+              </ModeratedPostBody>
+            </div>
             <footer className="mt-3 flex items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
               <Link
                 href={`/p/${post.id}`}
@@ -154,9 +167,9 @@ export function HomeFeed() {
                   selected
                 </span>
               ) : null}
-              {post.moderationState === 'limited' ? (
+              {post.moderationState !== 'ok' ? (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800">
-                  limited
+                  {post.moderationState.replace('_', ' ')}
                 </span>
               ) : null}
               {/*

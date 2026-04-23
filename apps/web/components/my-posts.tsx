@@ -30,6 +30,7 @@ import { formatTimestamp } from '@/lib/format-time';
 import { LikeCount } from '@/components/like-pill';
 import { CommentCount } from '@/components/comment-pill';
 import { PostContent } from '@/components/post-content';
+import { ModeratedPostBody } from '@/components/moderated-post-body';
 
 interface MyPostsProps {
   refreshKey: number;
@@ -153,10 +154,19 @@ export function MyPosts({ refreshKey }: MyPostsProps) {
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <PostContent
-                  content={post.content}
-                  className="whitespace-pre-wrap text-sm"
-                />
+                {/*
+                  This list is the viewer's own posts by definition — the
+                  /api/posts/mine endpoint scopes by the active persona.
+                  So isAuthor is always true and ModeratedPostBody will
+                  render the content with a banner above when moderation
+                  state is non-ok.
+                */}
+                <ModeratedPostBody post={post} isAuthor>
+                  <PostContent
+                    content={post.content}
+                    className="whitespace-pre-wrap text-sm"
+                  />
+                </ModeratedPostBody>
                 <p className="mt-2 flex items-center gap-2 text-xs text-[hsl(var(--text-muted))]">
                   <Link
                     href={`/p/${post.id}`}
