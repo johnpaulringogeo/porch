@@ -5,3 +5,4 @@ export * from './contacts.js';
 export * from './notifications.js';
 export * from './account.js';
 export * from './audit.js';
+export * from './moderation.js';

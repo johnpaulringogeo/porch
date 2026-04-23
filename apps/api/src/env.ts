@@ -14,6 +14,17 @@ export interface Env {
    * Postgres driver that supports transactions.
    */
   PORCH_RUNTIME?: 'node' | 'edge';
+  /**
+   * Comma-separated list of account UUIDs permitted to hit moderator-only
+   * endpoints (POST /api/moderation/posts/:id/action, etc.). Intentionally
+   * env-var-driven for v0 — full admin identity (roles table, admin-grant
+   * audit, self-service tooling) is deferred to v0.5 per spec §11. Empty
+   * or unset means no admins; every moderation endpoint 403s.
+   *
+   * Whitespace around commas is tolerated; duplicates and case differences
+   * are collapsed in the middleware.
+   */
+  PORCH_ADMIN_ACCOUNT_IDS?: string;
 }
 
 export function readEnv(env: Partial<Env>): Env {
