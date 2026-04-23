@@ -1,6 +1,7 @@
 export * as Auth from './auth/index.js';
 export * as Did from './did/index.js';
 export * as PersonaOps from './persona/index.js';
+export * as AccountOps from './account/index.js';
 export * as ContactOps from './contact/index.js';
 export * as PostOps from './post/index.js';
 export * as CommentOps from './comment/index.js';

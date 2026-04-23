@@ -10,6 +10,7 @@
     "./auth": "./src/auth/index.ts",
     "./did": "./src/did/index.ts",
     "./persona": "./src/persona/index.ts",
+    "./account": "./src/account/index.ts",
     "./contact": "./src/contact/index.ts",
     "./post": "./src/post/index.ts",
     "./mention": "./src/mention/extract.ts",

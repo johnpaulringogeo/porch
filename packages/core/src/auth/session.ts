@@ -104,6 +104,32 @@ export async function revokeSessionByRefreshToken(
     .where(eq(session.refreshTokenHash, hash));
 }
 
+/**
+ * Revoke every non-revoked session belonging to `accountId`. Used by the
+ * account-deletion request flow to sign the user out of all devices at
+ * once — pre-revocation access tokens remain valid until their 15-minute
+ * expiry (enforced in middleware by an account-status check), but no new
+ * refresh can succeed after this runs.
+ *
+ * Idempotent: rows already revoked keep their earlier `revokedAt`, because
+ * the WHERE clause filters them out. Returns the number of sessions
+ * actually revoked so callers can log / audit.
+ */
+export async function revokeAllSessionsForAccount(
+  db: Database,
+  accountId: string,
+): Promise<number> {
+  // Drizzle's pg-core .returning() in this version takes no column projection
+  // — we only use this count for audit/logging, so returning the full row and
+  // measuring .length is fine (session rows are small).
+  const result = await db
+    .update(session)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(session.accountId, accountId), isNull(session.revokedAt)))
+    .returning();
+  return result.length;
+}
+
 export async function setActivePersona(
   db: Database,
   sessionId: string,

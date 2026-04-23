@@ -164,7 +164,18 @@ authRoutes.post('/login', async (c) => {
   }
 
   // Status gate.
-  if (acct.status === 'deleted' || acct.status === 'deletion_requested') {
+  //
+  // `deletion_requested` is intentionally *not* gated here: the 30-day grace
+  // window is only meaningful if the user can log back in to cancel it
+  // (requestDeletion revokes all prior sessions). Once they're signed in
+  // with the pending-deletion status, /api/account/me surfaces the grace
+  // cutoff and /api/account/delete/cancel flips status back to active.
+  //
+  // `deleted` is terminal: the hard-delete job has either run or is about
+  // to, and we don't want to hand out a fresh session against a row that's
+  // mid-cleanup. Masked as "invalid credentials" to avoid confirming the
+  // email was ever registered.
+  if (acct.status === 'deleted') {
     throw invalidCredentials();
   }
   if (acct.status === 'suspended') {
