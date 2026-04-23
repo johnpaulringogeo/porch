@@ -1,16 +1,79 @@
+# Cloudflare Workers config for the Porch API.
+#
+# Deploy:      pnpm --filter @porch/api deploy            (prod, default env)
+#              pnpm --filter @porch/api deploy --env staging
+# Local dev:   pnpm --filter @porch/api dev               (Node via server.node.ts,
+#                                                          NOT wrangler — faster HMR,
+#                                                          same Hono app)
+#
+# Secrets are populated via `wrangler secret put` per environment, NOT in this
+# file (this file is committed; secrets must not be). The full list of secrets
+# each environment needs is in `DEPLOYMENT.md` at the repo root.
+
 name = "porch-api"
 main = "src/index.ts"
 compatibility_date = "2024-05-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Production
+# ── Shared (non-secret) vars ────────────────────────────────────────────────
+# `[vars]` at the top level applies to the default environment. Env-specific
+# values below override these.
+
+# ── Production ──────────────────────────────────────────────────────────────
+#
+# Swap `porch.example` for the real host before `wrangler deploy --env production`.
+# The `PORCH_HOST` value MUST match the `did:web:<host>` segment we mint in
+# persona DIDs (see packages/core/src/did/did.ts). Changing it after personas
+# exist breaks their DID documents — migrate carefully.
+#
+# WEB_ORIGIN is the Next.js app's public origin; used for CORS and the
+# refresh-cookie domain scope. If the API and web app share a parent domain
+# (e.g. api.porch.example / porch.example), the cookie path scoping in
+# apps/api/src/routes/auth.ts still applies.
+
 [env.production]
 vars = { PORCH_HOST = "porch.example", WEB_ORIGIN = "https://porch.example" }
 
-# Staging
+# [env.production.route]
+# Uncomment and fill once the zone is added to your Cloudflare account. The
+# pattern matches everything API-bound; the web app is hosted elsewhere
+# (Vercel by default — see DEPLOYMENT.md).
+# pattern = "api.porch.example/*"
+# zone_name = "porch.example"
+
+# R2 (blob storage) — deferred to v0.5 (avatar upload, spec §18.1). Leave
+# commented until the upload flow ships; an empty binding fails to deploy.
+# [[env.production.r2_buckets]]
+# binding = "PORCH_MEDIA"
+# bucket_name = "porch-media-prod"
+
+# ── Staging ─────────────────────────────────────────────────────────────────
+
 [env.staging]
 vars = { PORCH_HOST = "staging.porch.example", WEB_ORIGIN = "https://staging.porch.example" }
 
-# Local-style preview (use `wrangler dev` for local hot reload).
-# Secrets (DATABASE_URL, PERSONA_KEY_ENCRYPTION_KEY, JWT_SIGNING_KEY) are
-# stored via `wrangler secret put` per environment.
+# [env.staging.route]
+# pattern = "api.staging.porch.example/*"
+# zone_name = "porch.example"
+
+# [[env.staging.r2_buckets]]
+# binding = "PORCH_MEDIA"
+# bucket_name = "porch-media-staging"
+
+# ── Secrets (NOT in this file) ──────────────────────────────────────────────
+#
+# For each environment run:
+#   wrangler secret put DATABASE_URL                --env production
+#   wrangler secret put PERSONA_KEY_ENCRYPTION_KEY  --env production
+#   wrangler secret put JWT_SIGNING_KEY             --env production
+#   wrangler secret put PORCH_ADMIN_ACCOUNT_IDS     --env production
+#
+# (and the same with --env staging). Generation commands and notes on rotation
+# are in DEPLOYMENT.md.
+#
+# The values:
+#   DATABASE_URL                  Neon pooled connection string (sslmode=require)
+#   PERSONA_KEY_ENCRYPTION_KEY    32 bytes, base64 — encrypts persona private keys
+#   JWT_SIGNING_KEY               32+ bytes, base64 — HS256 access-token signer
+#   PORCH_ADMIN_ACCOUNT_IDS       comma-separated account UUIDs allowed to hit
+#                                 /api/moderation/*/action (see spec §7.8)

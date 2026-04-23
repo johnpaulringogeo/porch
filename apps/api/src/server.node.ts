@@ -21,6 +21,9 @@ const env = readEnv({
   WEB_ORIGIN: process.env.WEB_ORIGIN,
   // Tells dbMiddleware to use the postgres-js TCP driver (transactions work).
   PORCH_RUNTIME: 'node',
+  // Optional — passed through so `requireAdmin` can gate moderation routes
+  // in local dev the same way prod does. Unset means no admins locally.
+  PORCH_ADMIN_ACCOUNT_IDS: process.env.PORCH_ADMIN_ACCOUNT_IDS,
 });
 
 const app = createApp();
