@@ -3,3 +3,4 @@ export * from './keys.js';
 export * from './document.js';
 export * from './signer.js';
 export * from './resolver.js';
+export * from './validate.js';
